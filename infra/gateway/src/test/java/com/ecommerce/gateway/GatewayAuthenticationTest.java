@@ -33,6 +33,9 @@ import static org.springframework.security.test.web.reactive.server.SecurityMock
                 "spring.cloud.gateway.server.webflux.routes[1].id=auth",
                 "spring.cloud.gateway.server.webflux.routes[1].uri=forward:/test/echo",
                 "spring.cloud.gateway.server.webflux.routes[1].predicates[0]=Path=/api/auth/**",
+                "spring.cloud.gateway.server.webflux.routes[2].id=products",
+                "spring.cloud.gateway.server.webflux.routes[2].uri=forward:/test/echo",
+                "spring.cloud.gateway.server.webflux.routes[2].predicates[0]=Path=/api/products/**",
         })
 class GatewayAuthenticationTest {
 
@@ -93,6 +96,12 @@ class GatewayAuthenticationTest {
                 .expectBody()
                 .jsonPath("$['" + AuthHeaders.USER_ID + "']").doesNotExist()
                 .jsonPath("$['" + AuthHeaders.USER_ROLES + "']").doesNotExist();
+    }
+
+    @Test
+    void publicPathCanBeLimitedToOneMethod() {
+        client.get().uri("/api/products/1").exchange().expectStatus().isOk();
+        client.post().uri("/api/products").exchange().expectStatus().isUnauthorized();
     }
 
     @TestConfiguration

@@ -1,0 +1,15 @@
+spring:
+  # Defaults point at the compose MySQL as seen from the host (port 3307).
+  datasource:
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3307}/order_db
+    username: order_svc
+    # Local dev only. A real deployment reads secrets from Vault / a secret manager, not from this repo.
+    password: ${ORDER_DB_PASSWORD:order_svc_pw}
+
+ecommerce:
+  clients:
+    product:
+      read-timeout: 2s
+    inventory:
+      # Kept short on purpose: a slow inventory leaves the order PENDING (the gap the step 3 Saga closes).
+      read-timeout: 3s

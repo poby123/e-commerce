@@ -1,0 +1,17 @@
+# Settings that are part of how the service works live here.
+# Settings that change per environment live in config-repo/inventory-service.yml.
+server:
+  port: 8083
+  shutdown: graceful
+
+spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+  application:
+    name: inventory-service
+  config:
+    import: "optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888}"
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate

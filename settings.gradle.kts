@@ -25,4 +25,7 @@ include(
     "infra:config-server",
     "infra:gateway",
     "services:user-service",
+    "services:product-service",
+    "services:inventory-service",
+    "services:order-service",
 )

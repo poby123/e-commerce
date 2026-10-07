@@ -17,3 +17,8 @@ ecommerce:
     # Local dev: a key generated at startup. Anywhere with more than one instance, mount a fixed key instead:
     #   private-key-location: file:./secrets/jwt-private.pem   (scripts/generate-jwt-key.sh)
     allow-generated-key: true
+
+  # Local dev only: first ADMIN account, created at startup if missing (registers products, sets stock).
+  bootstrap-admin:
+    email: admin@ecommerce.local
+    password: ${BOOTSTRAP_ADMIN_PASSWORD:admin1234!}

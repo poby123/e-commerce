@@ -1,0 +1,23 @@
+# Settings that are part of how the service works live here.
+# Settings that change per environment live in config-repo/order-service.yml.
+server:
+  port: 8084
+  shutdown: graceful
+
+spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+  application:
+    name: order-service
+  config:
+    import: "optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888}"
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  data:
+    web:
+      pageable:
+        # Stable JSON for Page responses (content + page metadata) instead of serializing PageImpl.
+        serialization-mode: via_dto
+        max-page-size: 100

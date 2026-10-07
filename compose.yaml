@@ -80,5 +80,29 @@ services:
       redis:
         condition: service_healthy
 
+  product-service:
+    <<: *service
+    build: { context: ., dockerfile: docker/Dockerfile, args: { MODULE: services/product-service } }
+    depends_on:
+      <<: *service-deps
+      mysql:
+        condition: service_healthy
+
+  inventory-service:
+    <<: *service
+    build: { context: ., dockerfile: docker/Dockerfile, args: { MODULE: services/inventory-service } }
+    depends_on:
+      <<: *service-deps
+      mysql:
+        condition: service_healthy
+
+  order-service:
+    <<: *service
+    build: { context: ., dockerfile: docker/Dockerfile, args: { MODULE: services/order-service } }
+    depends_on:
+      <<: *service-deps
+      mysql:
+        condition: service_healthy
+
 volumes:
   mysql-data:

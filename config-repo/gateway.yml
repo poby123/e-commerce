@@ -8,6 +8,19 @@ spring:
               uri: lb://user-service
               predicates:
                 - Path=/api/auth/**,/api/users/**
+            - id: product-service
+              uri: lb://product-service
+              predicates:
+                - Path=/api/products/**
+            - id: inventory-service
+              uri: lb://inventory-service
+              predicates:
+                - Path=/api/inventory/**
+            - id: order-service
+              uri: lb://order-service
+              predicates:
+                - Path=/api/orders/**
+          # /internal/** is deliberately not routed: service-to-service APIs are unreachable from outside.
 
 gateway:
   auth:

@@ -3,6 +3,7 @@ package com.ecommerce.gateway.security;
 import org.springframework.cloud.client.loadbalancer.LoadBalanced;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
 import org.springframework.security.oauth2.jwt.JwtValidators;
@@ -36,9 +37,10 @@ public class SecurityConfig {
                 // Stateless: no session, no saved request.
                 .securityContextRepository(NoOpServerSecurityContextRepository.getInstance())
                 .requestCache(cache -> cache.requestCache(NoOpServerRequestCache.getInstance()))
-                .authorizeExchange(exchange -> exchange
-                        .pathMatchers(properties.publicPaths().toArray(String[]::new)).permitAll()
-                        .anyExchange().authenticated())
+                .authorizeExchange(exchange -> {
+                    properties.publicPaths().forEach(entry -> permit(exchange, entry));
+                    exchange.anyExchange().authenticated();
+                })
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter()))
                         .authenticationEntryPoint(errorHandlers))
@@ -46,6 +48,16 @@ public class SecurityConfig {
                         .authenticationEntryPoint(errorHandlers)
                         .accessDeniedHandler(errorHandlers))
                 .build();
+    }
+
+    /** "GET /api/products/**" permits one method, "/api/auth/**" permits all. */
+    private static void permit(ServerHttpSecurity.AuthorizeExchangeSpec exchange, String entry) {
+        String[] parts = entry.trim().split("\\s+", 2);
+        if (parts.length == 2) {
+            exchange.pathMatchers(HttpMethod.valueOf(parts[0]), parts[1]).permitAll();
+        } else {
+            exchange.pathMatchers(parts[0]).permitAll();
+        }
     }
 
     @Bean

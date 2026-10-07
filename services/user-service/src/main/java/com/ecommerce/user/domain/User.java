@@ -54,6 +54,10 @@ public class User {
         return new User(email, passwordHash, name, UserRole.USER);
     }
 
+    public static User registerAdmin(String email, String passwordHash, String name) {
+        return new User(email, passwordHash, name, UserRole.ADMIN);
+    }
+
     @PrePersist
     void onCreate() {
         createdAt = Instant.now();
