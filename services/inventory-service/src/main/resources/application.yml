@@ -11,6 +11,13 @@ spring:
     name: inventory-service
   config:
     import: "optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888}"
+  kafka:
+    consumer:
+      group-id: ${spring.application.name}
+      auto-offset-reset: earliest
+    listener:
+      # Commit each record's offset after its handler (and its DB transaction) finished.
+      ack-mode: record
   jpa:
     open-in-view: false
     hibernate:

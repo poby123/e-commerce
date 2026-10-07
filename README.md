@@ -47,6 +47,7 @@ Java 21 · Spring Boot 3.5 · Spring Cloud 2025.0 · Gradle 8.14 (Kotlin DSL, co
 docker compose --profile app up -d --build
 scripts/smoke-test.sh                  # gateway를 통한 E2E 31개 항목 (인증 + 주문 Saga)
 scripts/demo-failures.sh               # 장애 재현: Debezium 중단(유실 없음), inventory 정지(타임아웃 → 보상)
+load-test/run.sh                       # 4단계 부하 테스트(k6, 약 2분) → load-test/results/summary.md
 ```
 
 - Eureka 대시보드: http://localhost:8761
@@ -81,6 +82,7 @@ scripts/demo-failures.sh               # 장애 재현: Debezium 중단(유실 �
 | POST | `/api/orders` | Bearer | 주문 접수(202, PENDING). 본문: `items`, `paymentToken`, 선택 `userCouponId`. `Idempotency-Key` 헤더 지원. 결과(COMPLETED / CANCELLED+사유)는 조회로 확인 |
 | POST | `/api/coupon-policies` | ADMIN | 쿠폰 정책 생성(FIXED/RATE, 최소주문금액, 수량) |
 | POST | `/api/coupon-policies/{id}/issue` | Bearer | 쿠폰 발급(1인 1매, 수량 제한) |
+| POST | `/api/coupon-policies/{id}/claim` | Bearer | 선착순 쿠폰(`firstCome` 정책). Redis에서 즉시 판정(202/409), DB에는 비동기 저장 |
 | GET | `/api/coupons/me` | Bearer | 내 쿠폰 |
 | GET | `/api/orders`, `/api/orders/{orderId}` | Bearer | 내 주문 목록·상세(남의 주문은 404) |
 
@@ -93,7 +95,7 @@ scripts/demo-failures.sh               # 장애 재현: Debezium 중단(유실 �
 - [x] **1. 골격** — 멀티모듈, Eureka, Config, Gateway(JWT), user-service
 - [x] **2. 상품·재고·주문** — 동기 호출로 주문 1건이 끝까지 성공. 타임아웃 시 PENDING에 묶이는 문제를 재현해 둠([ADR-0007](docs/adr/0007-sync-order-flow-gap.md))
 - [x] **3. 쿠폰 + 하이브리드 Saga** — OrderSaga 오케스트레이터(쿠폰→재고→결제, 역순 보상), Outbox(Debezium), 멱등 Consumer, Mock PG, 가입 축하 쿠폰(코레오그래피). [ADR-0008](docs/adr/0008-order-saga-implementation.md)
-- [ ] **4. 동시성** — 재고 차감 3방식(비관적 락/낙관적 락/Redis Lua) k6 비교, 선착순 쿠폰 발급(Redis Lua + Kafka)
+- [x] **4. 동시성** — 재고 차감 4방식 k6 비교, 선착순 쿠폰(Redis Lua + Kafka) 처리량 3.2배. [ADR-0009](docs/adr/0009-concurrency-strategies.md)
 - [ ] **5. 장애 격리·관측성** — Resilience4j, Micrometer Tracing + Zipkin, Prometheus/Grafana, Loki
 - [ ] 6. (선택) Elasticsearch CQRS, K8s/Helm, GitHub Actions
 
@@ -107,5 +109,6 @@ scripts/demo-failures.sh               # 장애 재현: Debezium 중단(유실 �
 6. [재고 예약: 조건부 UPDATE + orderId 예약 기록](docs/adr/0006-inventory-reservation.md)
 7. [동기 주문 흐름과 의도적으로 남긴 문제](docs/adr/0007-sync-order-flow-gap.md) — 3단계에서 해결
 8. [OrderSaga 구현](docs/adr/0008-order-saga-implementation.md)
+9. [동시성: 재고 차감 방식 비교와 선착순 쿠폰](docs/adr/0009-concurrency-strategies.md)
 
 개발 중 겪은 문제와 해결: [docs/troubleshooting.md](docs/troubleshooting.md)

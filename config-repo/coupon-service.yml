@@ -5,3 +5,7 @@ spring:
     username: coupon_svc
     # Local dev only. A real deployment reads secrets from Vault / a secret manager, not from this repo.
     password: ${COUPON_DB_PASSWORD:coupon_svc_pw}
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6380}

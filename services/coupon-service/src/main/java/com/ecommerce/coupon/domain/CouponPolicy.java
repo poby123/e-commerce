@@ -49,6 +49,9 @@ public class CouponPolicy {
     @Column(name = "valid_days", nullable = false)
     private int validDays;
 
+    @Column(name = "first_come", nullable = false)
+    private boolean firstCome;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -56,7 +59,7 @@ public class CouponPolicy {
     }
 
     public CouponPolicy(String code, String name, DiscountType discountType, long discountValue, Long maxDiscountAmount,
-                        long minOrderAmount, Integer totalQuantity, int validDays) {
+                        long minOrderAmount, Integer totalQuantity, int validDays, boolean firstCome) {
         this.code = code;
         this.name = name;
         this.discountType = discountType;
@@ -65,6 +68,7 @@ public class CouponPolicy {
         this.minOrderAmount = minOrderAmount;
         this.totalQuantity = totalQuantity;
         this.validDays = validDays;
+        this.firstCome = firstCome;
     }
 
     /** Never more than the order itself, and RATE is capped. */
@@ -122,5 +126,9 @@ public class CouponPolicy {
 
     public int getValidDays() {
         return validDays;
+    }
+
+    public boolean isFirstCome() {
+        return firstCome;
     }
 }

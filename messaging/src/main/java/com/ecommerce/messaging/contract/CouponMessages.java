@@ -20,4 +20,7 @@ public final class CouponMessages {
 
     public record CouponRejected(String sagaId, String reason) {
     }
+
+    public record CouponClaimed(long policyId, long userId) {
+    }
 }

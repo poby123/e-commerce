@@ -4,13 +4,8 @@ spring:
     virtual:
       enabled: true
   kafka:
+    # Consumer group and ack mode are part of how each service works: see the services' application.yml.
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:29092}
-    consumer:
-      group-id: ${spring.application.name}
-      auto-offset-reset: earliest
-    listener:
-      # Commit each record's offset after its handler (and its DB transaction) finished.
-      ack-mode: record
   cloud:
     loadbalancer:
       cache:

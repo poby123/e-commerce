@@ -24,3 +24,16 @@
 - **증상**: 보상 후 재고가 5로 찍혔다(8이어야 함).
 - **원인**: 시스템은 정상이었다. inventory가 멈춰 있는 동안에는 재고가 줄지 않은 상태(8)였고, 스크립트가 "8이 될 때까지 대기"하다가 즉시 통과했다. 그 뒤 예약(…45.61)과 복구(…45.64) 사이의 30ms에 값을 읽었다.
 - **교훈**: 비동기 시스템의 검증은 "값이 X가 될 때까지"가 아니라 "이 작업이 끝날 때까지(예약 RELEASED)"를 기다려야 한다.
+
+## 5. Testcontainers Kafka가 시작 직후 종료 (4단계)
+- **증상**: `Timed out waiting for log output matching '.*Transitioning from RECOVERY to RUNNING.*'`
+- **원인**: 컨테이너 로그에 `advertised.listeners cannot use the nonroutable meta-address 0.0.0.0`. Kafka 3.9부터 이 값을 거부하는데, Testcontainers 1.21의 `KafkaContainer`가 내부 리스너를 0.0.0.0으로 광고한다.
+- **해결**: 테스트만 `apache/kafka:3.8.1`을 쓴다(클라이언트 프로토콜 동일). compose는 3.9.0 유지. 이유는 `FirstComeClaimTest`에 주석으로 남겼다.
+
+## 6. 테스트에서 Kafka group.id 누락 (4단계)
+- **원인**: group id를 config-repo에만 두었는데, 테스트는 config-server 없이 뜬다.
+- **해결**: group id, offset reset, ack 모드는 "환경 값"이 아니라 서비스 동작이므로 각 서비스의 `application.yml`로 옮겼다(README의 설정 원칙). k8s에서 config-server를 빼도 유지된다.
+
+## 7. 첫 부하 측정이 이론과 반대로 나옴 (4단계)
+- **증상**: 비관적 락이 조건부 UPDATE보다 빨랐다(측정 1~2초).
+- **조치**: 재고 3,000/요청 20,000으로 키우고 3회 반복 중앙값을 냈다. 여전히 둘의 차이는 노이즈 수준이었다. 이론("비관적 락은 느리다")에 맞추지 않고 그대로 기록했다(ADR-0009). 이 환경에서는 행 락 하나와 커넥션 풀 10개가 공통 병목이기 때문이다.

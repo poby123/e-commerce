@@ -7,6 +7,7 @@ import com.ecommerce.coupon.domain.CouponPolicy;
 import com.ecommerce.coupon.domain.CouponPolicyRepository;
 import com.ecommerce.coupon.domain.CouponService;
 import com.ecommerce.coupon.domain.DiscountType;
+import com.ecommerce.coupon.domain.FirstComeIssuer;
 import com.ecommerce.coupon.domain.UserCoupons;
 import com.ecommerce.coupon.domain.UserCoupons.UserCoupon;
 import com.ecommerce.coupon.error.CouponErrorCode;
@@ -19,6 +20,7 @@ import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -39,11 +41,14 @@ public class CouponController {
     private final CouponPolicyRepository policies;
     private final CouponService couponService;
     private final UserCoupons userCoupons;
+    private final FirstComeIssuer firstComeIssuer;
 
-    public CouponController(CouponPolicyRepository policies, CouponService couponService, UserCoupons userCoupons) {
+    public CouponController(CouponPolicyRepository policies, CouponService couponService, UserCoupons userCoupons,
+                            FirstComeIssuer firstComeIssuer) {
         this.policies = policies;
         this.couponService = couponService;
         this.userCoupons = userCoupons;
+        this.firstComeIssuer = firstComeIssuer;
     }
 
     public record CreatePolicyRequest(
@@ -54,7 +59,8 @@ public class CouponController {
             @Positive Long maxDiscountAmount,
             @PositiveOrZero long minOrderAmount,
             @Positive Integer totalQuantity,
-            @Positive @Max(365) int validDays
+            @Positive @Max(365) int validDays,
+            boolean firstCome
     ) {
     }
 
@@ -74,12 +80,15 @@ public class CouponController {
     @RequiresRole("ADMIN")
     @Transactional
     public PolicyResponse create(@Valid @RequestBody CreatePolicyRequest r) {
+        if (r.firstCome() && r.totalQuantity() == null) {
+            throw new BusinessException(CouponErrorCode.INVALID_POLICY, "A first-come policy needs a totalQuantity");
+        }
         if (r.discountType() == DiscountType.RATE && (r.discountValue() > 100 || r.maxDiscountAmount() == null)) {
             throw new BusinessException(CouponErrorCode.INVALID_POLICY, "RATE needs a value of 1-100 and a maxDiscountAmount");
         }
         try {
             return PolicyResponse.from(policies.saveAndFlush(new CouponPolicy(r.code(), r.name(), r.discountType(), r.discountValue(),
-                    r.maxDiscountAmount(), r.minOrderAmount(), r.totalQuantity(), r.validDays())));
+                    r.maxDiscountAmount(), r.minOrderAmount(), r.totalQuantity(), r.validDays(), r.firstCome())));
         } catch (DataIntegrityViolationException e) {
             throw new BusinessException(CouponErrorCode.DUPLICATE_CODE);
         }
@@ -96,6 +105,17 @@ public class CouponController {
     public UserCouponResponse issue(@CurrentUserId Long userId, @PathVariable long policyId) {
         UserCoupon coupon = couponService.issue(policyId, userId);
         return toResponse(coupon, policies.findById(policyId).orElseThrow());
+    }
+
+    /**
+     * First-come claim: 202 when won (the coupon appears in /api/coupons/me shortly after), 409 when sold out or
+     * already claimed. Decided in Redis; stored asynchronously (FirstComeIssuer).
+     */
+    @PostMapping("/api/coupon-policies/{policyId}/claim")
+    public ResponseEntity<Map<String, String>> claim(@CurrentUserId Long userId, @PathVariable long policyId) {
+        FirstComeIssuer.Result result = firstComeIssuer.claim(policyId, userId);
+        HttpStatus status = result == FirstComeIssuer.Result.WON ? HttpStatus.ACCEPTED : HttpStatus.CONFLICT;
+        return ResponseEntity.status(status).body(Map.of("result", result.name()));
     }
 
     @GetMapping("/api/coupons/me")

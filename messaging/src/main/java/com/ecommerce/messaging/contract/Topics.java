@@ -13,11 +13,14 @@ public final class Topics {
     public static final String PAYMENT_COMMAND = "payment.command";
     public static final String ORDER_SAGA_REPLY = "order.saga-reply";
 
+    /** Internal to coupon-service: first-come winners decided in Redis, stored by a consumer. */
+    public static final String COUPON_CLAIM = "coupon.claim";
+
     public static final String USER_EVENTS = "user.events";
     public static final String ORDER_EVENTS = "order.events";
 
     public static final List<String> ALL = List.of(COUPON_COMMAND, INVENTORY_COMMAND, PAYMENT_COMMAND, ORDER_SAGA_REPLY,
-            USER_EVENTS, ORDER_EVENTS);
+            COUPON_CLAIM, USER_EVENTS, ORDER_EVENTS);
 
     private Topics() {
     }

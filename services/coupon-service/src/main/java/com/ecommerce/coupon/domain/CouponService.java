@@ -47,6 +47,9 @@ public class CouponService {
     @Transactional
     public UserCoupon issue(long policyId, long userId) {
         CouponPolicy policy = policies.findById(policyId).orElseThrow(() -> new BusinessException(CouponErrorCode.POLICY_NOT_FOUND));
+        if (policy.isFirstCome()) {
+            throw new BusinessException(CouponErrorCode.WRONG_ISSUE_PATH);
+        }
         int taken = jdbc.update("""
                 UPDATE coupon_policies SET issued_quantity = issued_quantity + 1
                 WHERE id = ? AND (total_quantity IS NULL OR issued_quantity < total_quantity)

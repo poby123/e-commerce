@@ -5,3 +5,12 @@ spring:
     username: inventory_svc
     # Local dev only. A real deployment reads secrets from Vault / a secret manager, not from this repo.
     password: ${INVENTORY_DB_PASSWORD:inventory_svc_pw}
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6380}
+
+ecommerce:
+  # Local only: /internal/loadtest/** endpoints for the step 4 strategy comparison (load-test/).
+  loadtest:
+    enabled: true
