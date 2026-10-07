@@ -9,7 +9,6 @@ import com.ecommerce.order.api.OrderDtos.PlaceOrderRequest;
 import com.ecommerce.order.application.OrderService;
 import com.ecommerce.order.domain.Order;
 import com.ecommerce.order.domain.OrderRepository;
-import com.ecommerce.order.domain.OrderStatus;
 import com.ecommerce.order.error.OrderErrorCode;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
@@ -40,8 +39,8 @@ public class OrderController {
     }
 
     /**
-     * 201 when the order is confirmed. 202 when it was saved but inventory did not answer in time: the result
-     * is not known yet, and the client should poll GET /api/orders/{orderId}.
+     * 202: the order is accepted and its saga started. The outcome (COMPLETED or CANCELLED with a reason)
+     * arrives asynchronously; the client polls GET /api/orders/{orderId}.
      */
     @PostMapping
     public ResponseEntity<OrderResponse> place(@CurrentUserId Long userId,
@@ -50,9 +49,8 @@ public class OrderController {
         if (idempotencyKey != null && (idempotencyKey.isBlank() || idempotencyKey.length() > 64)) {
             throw new BusinessException(CommonErrorCode.INVALID_INPUT, "Idempotency-Key must be 1-64 characters");
         }
-        Order order = orderService.place(userId, idempotencyKey, request.items());
-        HttpStatus status = order.getStatus() == OrderStatus.PENDING ? HttpStatus.ACCEPTED : HttpStatus.CREATED;
-        return ResponseEntity.status(status).body(OrderResponse.from(order));
+        Order order = orderService.place(userId, idempotencyKey, request);
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(OrderResponse.from(order));
     }
 
     @GetMapping("/{orderId}")

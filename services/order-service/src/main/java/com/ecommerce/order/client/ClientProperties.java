@@ -11,8 +11,7 @@ import java.time.Duration;
  */
 @ConfigurationProperties("ecommerce.clients")
 public record ClientProperties(
-        @DefaultValue Target product,
-        @DefaultValue Target inventory
+        @DefaultValue Target product
 ) {
 
     public record Target(

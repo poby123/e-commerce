@@ -34,11 +34,6 @@ public class ClientConfig {
         return create(ProductClient.class, "product-service", builder, properties.product(), objectMapper);
     }
 
-    @Bean
-    InventoryClient inventoryClient(@LoadBalanced RestClient.Builder builder, ClientProperties properties, ObjectMapper objectMapper) {
-        return create(InventoryClient.class, "inventory-service", builder, properties.inventory(), objectMapper);
-    }
-
     private static <T> T create(Class<T> type, String service, RestClient.Builder builder,
                                 ClientProperties.Target target, ObjectMapper objectMapper) {
         HttpClient httpClient = HttpClient.newBuilder().connectTimeout(target.connectTimeout()).build();

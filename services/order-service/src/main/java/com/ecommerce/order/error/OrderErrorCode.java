@@ -7,7 +7,6 @@ public enum OrderErrorCode implements ErrorCode {
 
     PRODUCT_NOT_FOUND(HttpStatus.BAD_REQUEST, "ORDER-001", "A product in the order does not exist"),
     PRODUCT_NOT_ON_SALE(HttpStatus.BAD_REQUEST, "ORDER-002", "A product in the order is not on sale"),
-    OUT_OF_STOCK(HttpStatus.CONFLICT, "ORDER-003", "Not enough stock"),
     ORDER_NOT_FOUND(HttpStatus.NOT_FOUND, "ORDER-004", "Order not found"),
     DEPENDENCY_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "ORDER-005", "A required service is unavailable, try again later");
 

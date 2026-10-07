@@ -1,6 +1,6 @@
 # ADR-0003 Transactional Outbox
 
-- 상태: 채택 (2026-10-07), 3단계에서 구현
+- 상태: 채택, 구현 완료 (2026-10-07). 검증 결과는 ADR-0008
 
 ## 결정
 - "DB 변경 + 메시지 발행"이 일어나는 모든 지점(order, coupon, inventory, payment)에서 메시지를 같은 DB의 `outbox` 테이블에 쓰고, Debezium(CDC)이 Kafka로 발행한다.

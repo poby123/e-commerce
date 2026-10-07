@@ -122,7 +122,7 @@ class PaymentCommandHandlerTest {
     }
 
     private List<String> replies(String order) {
-        return jdbc.queryForList("SELECT type FROM outbox WHERE aggregate_id = ? ORDER BY created_at", String.class, order);
+        return jdbc.queryForList("SELECT type FROM outbox WHERE aggregate_id = ? ORDER BY seq", String.class, order);
     }
 
     private String field(String order, String name) {

@@ -2,14 +2,14 @@ package com.ecommerce.order.application;
 
 import com.ecommerce.common.error.BusinessException;
 import com.ecommerce.order.api.OrderDtos.Line;
-import com.ecommerce.order.client.DownstreamException;
-import com.ecommerce.order.client.InventoryClient;
+import com.ecommerce.order.api.OrderDtos.PlaceOrderRequest;
 import com.ecommerce.order.client.ProductClient;
 import com.ecommerce.order.client.ProductClient.ProductSnapshot;
 import com.ecommerce.order.domain.Order;
 import com.ecommerce.order.domain.OrderItem;
 import com.ecommerce.order.domain.OrderRepository;
 import com.ecommerce.order.error.OrderErrorCode;
+import com.ecommerce.order.saga.OrderSagaManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -20,19 +20,13 @@ import org.springframework.web.client.RestClientException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * Places an order with synchronous calls: product-service (prices) then inventory-service (stock).
- *
- * <p>No DB transaction is open while another service is called: each local step commits on its own, so a slow
- * dependency does not hold a DB connection and row locks.
- *
- * <p><b>Known gap, kept on purpose until step 3 (Saga):</b> if inventory does not answer in time we cannot tell
- * whether it reserved the stock. The order is left PENDING and nothing reconciles it. A PENDING order may
- * therefore be holding stock forever. See OrderPlacementTest#inventoryTimeoutLeavesOrderPending.
+ * Accepts an order: prices it (a read, so a synchronous call is fine), then saves it together with its saga
+ * and the saga's first command in one transaction. Everything that changes other services' data happens in
+ * the saga (ADR-0002), which replaced step 2's synchronous inventory call (ADR-0007).
  */
 @Service
 public class OrderService {
@@ -42,18 +36,18 @@ public class OrderService {
 
     private final OrderRepository orderRepository;
     private final ProductClient productClient;
-    private final InventoryClient inventoryClient;
+    private final OrderSagaManager sagaManager;
     private final TransactionTemplate transaction;
 
-    public OrderService(OrderRepository orderRepository, ProductClient productClient, InventoryClient inventoryClient,
+    public OrderService(OrderRepository orderRepository, ProductClient productClient, OrderSagaManager sagaManager,
                         TransactionTemplate transaction) {
         this.orderRepository = orderRepository;
         this.productClient = productClient;
-        this.inventoryClient = inventoryClient;
+        this.sagaManager = sagaManager;
         this.transaction = transaction;
     }
 
-    public Order place(long userId, String idempotencyKey, List<Line> lines) {
+    public Order place(long userId, String idempotencyKey, PlaceOrderRequest request) {
         if (idempotencyKey != null) {
             var existing = orderRepository.findByUserIdAndIdempotencyKey(userId, idempotencyKey);
             if (existing.isPresent()) {
@@ -61,46 +55,18 @@ public class OrderService {
             }
         }
 
-        Map<Long, Integer> quantities = mergeLines(lines);
-        List<OrderItem> items = priceItems(quantities);
+        List<OrderItem> items = priceItems(mergeLines(request.items()));
 
-        Order order;
         try {
-            order = transaction.execute(status -> orderRepository.save(Order.place(userId, idempotencyKey, items)));
+            return transaction.execute(status -> {
+                Order order = orderRepository.save(Order.place(userId, idempotencyKey, request.userCouponId(), items));
+                sagaManager.start(order, request.paymentToken());
+                return order;
+            });
         } catch (DataIntegrityViolationException duplicate) {
             // Two requests with the same key raced past the lookup above; the first one's order is the answer.
             return orderRepository.findByUserIdAndIdempotencyKey(userId, idempotencyKey).orElseThrow(() -> duplicate);
         }
-
-        return reserveStock(order);
-    }
-
-    private Order reserveStock(Order order) {
-        var request = new InventoryClient.ReserveRequest(order.getOrderId(), order.getItems().stream()
-                .map(item -> new InventoryClient.Item(item.getProductId(), item.getQuantity()))
-                .toList());
-        try {
-            inventoryClient.reserve(request);
-        } catch (DownstreamException e) {
-            if (!"INVENTORY-001".equals(e.code())) {
-                throw e;
-            }
-            update(order, o -> o.reject("OUT_OF_STOCK"));
-            throw new BusinessException(OrderErrorCode.OUT_OF_STOCK);
-        } catch (RestClientException e) {
-            // Timeout or 5xx: the reservation may or may not have happened. Leave the order PENDING.
-            log.warn("Inventory did not confirm order {}; left PENDING", order.getOrderId(), e);
-            return order;
-        }
-        return update(order, Order::confirm);
-    }
-
-    private Order update(Order order, Consumer<Order> change) {
-        return transaction.execute(status -> {
-            Order managed = orderRepository.findByOrderId(order.getOrderId()).orElseThrow();
-            change.accept(managed);
-            return managed;
-        });
     }
 
     /** Same product twice in one request (e.g. added from two pages) becomes one line. */

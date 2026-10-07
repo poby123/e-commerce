@@ -1,8 +1,9 @@
 package com.ecommerce.order.domain;
 
 public enum OrderStatus {
-    /** Saved, stock not confirmed yet. Also where an order is left when inventory did not answer in time. */
+    /** The saga is running: coupon, stock and payment are being reserved. */
     PENDING,
-    CONFIRMED,
-    REJECTED
+    COMPLETED,
+    /** A step was refused or timed out; everything reserved was given back. See failureReason. */
+    CANCELLED
 }

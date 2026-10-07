@@ -8,7 +8,9 @@ CREATE TABLE outbox
     type           VARCHAR(100) NOT NULL,
     payload        JSON         NOT NULL,
     created_at     DATETIME(6)  NOT NULL,
+    seq            BIGINT       NOT NULL AUTO_INCREMENT, -- insertion order (several rows can share a created_at)
     PRIMARY KEY (id),
+    UNIQUE KEY uk_outbox_seq (seq),
     INDEX idx_outbox_created_at (created_at)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4

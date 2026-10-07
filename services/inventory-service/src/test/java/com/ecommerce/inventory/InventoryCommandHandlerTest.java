@@ -97,7 +97,7 @@ class InventoryCommandHandlerTest {
     }
 
     private List<String> replies(String sagaId) {
-        return jdbc.queryForList("SELECT type FROM outbox WHERE aggregate_type = 'order.saga-reply' AND aggregate_id = ? ORDER BY created_at",
+        return jdbc.queryForList("SELECT type FROM outbox WHERE aggregate_type = 'order.saga-reply' AND aggregate_id = ? ORDER BY seq",
                 String.class, sagaId);
     }
 

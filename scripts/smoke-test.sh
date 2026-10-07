@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # End-to-end check through the gateway.
 #   auth:  signup -> login -> authenticated call -> refresh rotation -> logout
-#   order: admin registers a product and stock -> user orders -> idempotent retry -> sold out
+#   order: saga completes, idempotent retry, welcome coupon (choreography), declined card compensates
+#          stock and coupon, coupon discount, sold out
 # Usage: scripts/smoke-test.sh [gateway-url]   (default http://localhost:8000)
 set -euo pipefail
 
@@ -56,7 +57,21 @@ check "logout" 204 "$STATUS"
 call POST /api/auth/refresh "{\"refreshToken\":\"$REFRESH\"}"
 check "refresh after logout" 401 "$STATUS"
 
-echo "-- order flow"
+echo "-- order flow (saga)"
+wait_order() { # orderId expected-status -> leaves the order JSON in BODY
+  for _ in $(seq 1 40); do
+    call GET "/api/orders/$1" "" -H "Authorization: Bearer $ACCESS"
+    [[ "$(jq -r .status <<<"$BODY")" == "$2" ]] && return 0
+    sleep 0.5
+  done
+  return 0
+}
+order() { # productId quantity token [couponId] [idempotencyKey]
+  local coupon=${4:+,\"userCouponId\":$4}
+  call POST /api/orders "{\"items\":[{\"productId\":$1,\"quantity\":$2}],\"paymentToken\":\"$3\"$coupon}" \
+    -H "Authorization: Bearer $ACCESS" ${5:+-H "Idempotency-Key: $5"}
+}
+
 call POST /api/auth/login "{\"email\":\"$EMAIL\",\"password\":\"password123\"}"
 ACCESS=$(jq -r .accessToken <<<"$BODY")
 call POST /api/auth/login '{"email":"admin@ecommerce.local","password":"admin1234!"}'
@@ -68,36 +83,53 @@ check "non-admin cannot register a product" 403 "$STATUS"
 call POST /api/products '{"name":"Smoke mug","price":12000}' -H "Authorization: Bearer $ADMIN"
 check "admin registers a product" 201 "$STATUS"
 PRODUCT_ID=$(jq -r .id <<<"$BODY")
-call PUT "/api/inventory/$PRODUCT_ID" '{"quantity":3}' -H "Authorization: Bearer $ADMIN"
-check "admin sets stock to 3" 200 "$STATUS"
-
+call PUT "/api/inventory/$PRODUCT_ID" '{"quantity":5}' -H "Authorization: Bearer $ADMIN"
+check "admin sets stock to 5" 200 "$STATUS"
 call GET "/api/products/$PRODUCT_ID" ""
 check "product page is public" 200 "$STATUS"
 
-ORDER_BODY="{\"items\":[{\"productId\":$PRODUCT_ID,\"quantity\":2}]}"
-call POST /api/orders "$ORDER_BODY" -H "Authorization: Bearer $ACCESS"
-check "order for 2 is confirmed" 201 "$STATUS"
-check "status" CONFIRMED "$(jq -r .status <<<"$BODY")"
-check "total uses the product price" 24000 "$(jq -r .totalAmount <<<"$BODY")"
+order "$PRODUCT_ID" 2 tok_approve
+check "order is accepted (saga started)" 202 "$STATUS"
 ORDER_ID=$(jq -r .orderId <<<"$BODY")
+wait_order "$ORDER_ID" COMPLETED
+check "saga completes: coupon-less order paid" COMPLETED "$(jq -r .status <<<"$BODY")"
+check "paid the full price" 24000 "$(jq -r .paymentAmount <<<"$BODY")"
 
 IDEM="retry-$RANDOM-$RANDOM"
-ONE="{\"items\":[{\"productId\":$PRODUCT_ID,\"quantity\":1}]}"
-call POST /api/orders "$ONE" -H "Authorization: Bearer $ACCESS" -H "Idempotency-Key: $IDEM"
-FIRST=$(jq -r .orderId <<<"$BODY")
-call POST /api/orders "$ONE" -H "Authorization: Bearer $ACCESS" -H "Idempotency-Key: $IDEM"
+order "$PRODUCT_ID" 1 tok_approve "" "$IDEM"; FIRST=$(jq -r .orderId <<<"$BODY")
+order "$PRODUCT_ID" 1 tok_approve "" "$IDEM"
 check "same Idempotency-Key returns the same order" "$FIRST" "$(jq -r .orderId <<<"$BODY")"
+wait_order "$FIRST" COMPLETED
 
+call GET /api/coupons/me "" -H "Authorization: Bearer $ACCESS"
+for _ in $(seq 1 20); do [[ "$(jq length <<<"$BODY")" -ge 1 ]] && break; sleep 0.5; call GET /api/coupons/me "" -H "Authorization: Bearer $ACCESS"; done
+check "signup event issued the WELCOME coupon (choreography)" WELCOME "$(jq -r '.[0].code' <<<"$BODY")"
+COUPON_ID=$(jq -r '.[0].id' <<<"$BODY")
+
+order "$PRODUCT_ID" 1 tok_decline "$COUPON_ID"; DECLINED=$(jq -r .orderId <<<"$BODY")
+wait_order "$DECLINED" CANCELLED
+check "declined card cancels the order" CARD_DECLINED "$(jq -r .failureReason <<<"$BODY")"
 call GET "/api/inventory/$PRODUCT_ID" "" -H "Authorization: Bearer $ACCESS"
-check "stock is 3 - 2 - 1 (the retry took nothing)" 0 "$(jq -r .quantity <<<"$BODY")"
+for _ in $(seq 1 20); do [[ "$(jq -r .quantity <<<"$BODY")" == 2 ]] && break; sleep 0.5; call GET "/api/inventory/$PRODUCT_ID" "" -H "Authorization: Bearer $ACCESS"; done
+check "compensation returned the stock (5 - 2 - 1)" 2 "$(jq -r .quantity <<<"$BODY")"
+call GET /api/coupons/me "" -H "Authorization: Bearer $ACCESS"
+for _ in $(seq 1 20); do [[ "$(jq -r '.[0].status' <<<"$BODY")" == ISSUED ]] && break; sleep 0.5; call GET /api/coupons/me "" -H "Authorization: Bearer $ACCESS"; done
+check "compensation returned the coupon" ISSUED "$(jq -r '.[0].status' <<<"$BODY")"
 
-call POST /api/orders "$ORDER_BODY" -H "Authorization: Bearer $ACCESS"
-check "sold out" 409 "$STATUS"
-check "sold-out code" ORDER-003 "$(jq -r .code <<<"$BODY")"
+order "$PRODUCT_ID" 1 tok_approve "$COUPON_ID"; WITH_COUPON=$(jq -r .orderId <<<"$BODY")
+wait_order "$WITH_COUPON" COMPLETED
+check "order with the coupon completes" COMPLETED "$(jq -r .status <<<"$BODY")"
+check "paid 12,000 - 3,000" 9000 "$(jq -r .paymentAmount <<<"$BODY")"
+call GET /api/coupons/me "" -H "Authorization: Bearer $ACCESS"
+for _ in $(seq 1 20); do [[ "$(jq -r '.[0].status' <<<"$BODY")" == USED ]] && break; sleep 0.5; call GET /api/coupons/me "" -H "Authorization: Bearer $ACCESS"; done
+check "coupon is USED" USED "$(jq -r '.[0].status' <<<"$BODY")"
+
+order "$PRODUCT_ID" 5 tok_approve; SOLD_OUT=$(jq -r .orderId <<<"$BODY")
+wait_order "$SOLD_OUT" CANCELLED
+check "more than the stock left is cancelled" OUT_OF_STOCK "$(jq -r .failureReason <<<"$BODY")"
 
 call GET "/api/orders/$ORDER_ID" "" -H "Authorization: Bearer $ADMIN"
 check "another user cannot see the order" 404 "$STATUS"
-
 call GET "/internal/products?ids=$PRODUCT_ID" "" -H "Authorization: Bearer $ACCESS"
 check "/internal/** is not reachable through the gateway" 404 "$STATUS"
 

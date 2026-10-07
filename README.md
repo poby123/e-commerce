@@ -24,9 +24,12 @@
 | `infra/gateway` | 8000 | ✅ 외부에 열린 유일한 포트 |
 | `services/user-service` | 8081 | ✅ 회원가입·로그인·토큰 재발급·로그아웃, 관리자 시드 |
 | `services/product-service` | 8082 | ✅ 상품 조회(공개)·등록/수정(ADMIN), 주문용 bulk 조회 |
-| `services/inventory-service` | 8083 | ✅ 조건부 UPDATE 차감, orderId 예약/복구(멱등) |
-| `services/order-service` | 8084 | ✅ 동기 주문(가격 스냅샷, Idempotency-Key) — 3단계에서 Saga로 대체 |
-| coupon / payment / notification | 8085~ | 예정 |
+| `services/inventory-service` | 8083 | ✅ 조건부 UPDATE 차감, Saga 참여자(ReserveStock/ReleaseStock) |
+| `services/order-service` | 8084 | ✅ 주문 접수 + **OrderSaga 오케스트레이터**, 타임아웃 잡 |
+| `services/coupon-service` | 8085 | ✅ 정책·발급, Saga 참여자(예약/확정/복구), 가입 축하 쿠폰(이벤트 구독) |
+| `services/payment-service` | 8086 | ✅ Mock PG(`tok_approve`/`tok_decline`/`tok_slow`), 멱등 결제·취소 |
+| `messaging` | — | Transactional Outbox, 멱등 Consumer, DLT, 메시지 계약 |
+| Kafka 3.9 (KRaft) + Debezium 3.0 | 29092 / 18083 | ✅ Outbox 테이블 → binlog → Kafka |
 | `common` | — | 공통 에러 포맷, `AuthHeaders`, `@CurrentUserId` |
 
 ## 스택
@@ -42,7 +45,8 @@ Java 21 · Spring Boot 3.5 · Spring Cloud 2025.0 · Gradle 8.14 (Kotlin DSL, co
 ./gradlew build                        # 컴파일 + 테스트 (Testcontainers로 실제 MySQL/Redis 사용)
 ./gradlew bootJar
 docker compose --profile app up -d --build
-scripts/smoke-test.sh                  # gateway를 통한 E2E 26개 항목 (인증 + 주문)
+scripts/smoke-test.sh                  # gateway를 통한 E2E 31개 항목 (인증 + 주문 Saga)
+scripts/demo-failures.sh               # 장애 재현: Debezium 중단(유실 없음), inventory 정지(타임아웃 → 보상)
 ```
 
 - Eureka 대시보드: http://localhost:8761
@@ -74,7 +78,10 @@ scripts/smoke-test.sh                  # gateway를 통한 E2E 26개 항목 (인
 | GET | `/api/products`, `/api/products/{id}` | – | 판매 중 상품 목록(페이지)·상세 |
 | POST / PATCH | `/api/products`, `/api/products/{id}` | ADMIN | 등록·수정(가격, 판매중지) |
 | GET / PUT | `/api/inventory/{productId}` | Bearer / ADMIN | 재고 조회·설정 |
-| POST | `/api/orders` | Bearer | 주문. 201 확정 / 409 재고 부족 / 202 결과 미확정(PENDING). `Idempotency-Key` 헤더 지원 |
+| POST | `/api/orders` | Bearer | 주문 접수(202, PENDING). 본문: `items`, `paymentToken`, 선택 `userCouponId`. `Idempotency-Key` 헤더 지원. 결과(COMPLETED / CANCELLED+사유)는 조회로 확인 |
+| POST | `/api/coupon-policies` | ADMIN | 쿠폰 정책 생성(FIXED/RATE, 최소주문금액, 수량) |
+| POST | `/api/coupon-policies/{id}/issue` | Bearer | 쿠폰 발급(1인 1매, 수량 제한) |
+| GET | `/api/coupons/me` | Bearer | 내 쿠폰 |
 | GET | `/api/orders`, `/api/orders/{orderId}` | Bearer | 내 주문 목록·상세(남의 주문은 404) |
 
 서비스 간 API는 `/internal/**`이고 gateway 라우트가 없어 외부에서 호출할 수 없다.
@@ -85,7 +92,7 @@ scripts/smoke-test.sh                  # gateway를 통한 E2E 26개 항목 (인
 
 - [x] **1. 골격** — 멀티모듈, Eureka, Config, Gateway(JWT), user-service
 - [x] **2. 상품·재고·주문** — 동기 호출로 주문 1건이 끝까지 성공. 타임아웃 시 PENDING에 묶이는 문제를 재현해 둠([ADR-0007](docs/adr/0007-sync-order-flow-gap.md))
-- [ ] **3. 쿠폰 + 하이브리드 Saga** — OrderSaga 오케스트레이터(쿠폰→재고→결제, 역순 보상), Outbox(Debezium), 멱등 Consumer, Mock PG
+- [x] **3. 쿠폰 + 하이브리드 Saga** — OrderSaga 오케스트레이터(쿠폰→재고→결제, 역순 보상), Outbox(Debezium), 멱등 Consumer, Mock PG, 가입 축하 쿠폰(코레오그래피). [ADR-0008](docs/adr/0008-order-saga-implementation.md)
 - [ ] **4. 동시성** — 재고 차감 3방식(비관적 락/낙관적 락/Redis Lua) k6 비교, 선착순 쿠폰 발급(Redis Lua + Kafka)
 - [ ] **5. 장애 격리·관측성** — Resilience4j, Micrometer Tracing + Zipkin, Prometheus/Grafana, Loki
 - [ ] 6. (선택) Elasticsearch CQRS, K8s/Helm, GitHub Actions
@@ -98,4 +105,7 @@ scripts/smoke-test.sh                  # gateway를 통한 E2E 26개 항목 (인
 4. [인증: Gateway에서 JWT 검증](docs/adr/0004-authentication-at-gateway.md)
 5. [버전 선택](docs/adr/0005-versions.md)
 6. [재고 예약: 조건부 UPDATE + orderId 예약 기록](docs/adr/0006-inventory-reservation.md)
-7. [동기 주문 흐름과 의도적으로 남긴 문제](docs/adr/0007-sync-order-flow-gap.md)
+7. [동기 주문 흐름과 의도적으로 남긴 문제](docs/adr/0007-sync-order-flow-gap.md) — 3단계에서 해결
+8. [OrderSaga 구현](docs/adr/0008-order-saga-implementation.md)
+
+개발 중 겪은 문제와 해결: [docs/troubleshooting.md](docs/troubleshooting.md)

@@ -5,6 +5,8 @@ name: ecommerce
 x-service: &service
   profiles: [ app ]
   restart: on-failure
+  # With a limit, the image's -XX:MaxRAMPercentage=75 gives each JVM a ~576 MB heap ceiling.
+  mem_limit: 768m
   environment:
     CONFIG_SERVER_URL: http://config-server:8888
     EUREKA_URL: http://discovery-server:8761/eureka/
@@ -158,6 +160,22 @@ services:
   order-service:
     <<: *service
     build: { context: ., dockerfile: docker/Dockerfile, args: { MODULE: services/order-service } }
+    depends_on:
+      <<: *service-deps
+      mysql:
+        condition: service_healthy
+
+  coupon-service:
+    <<: *service
+    build: { context: ., dockerfile: docker/Dockerfile, args: { MODULE: services/coupon-service } }
+    depends_on:
+      <<: *service-deps
+      mysql:
+        condition: service_healthy
+
+  payment-service:
+    <<: *service
+    build: { context: ., dockerfile: docker/Dockerfile, args: { MODULE: services/payment-service } }
     depends_on:
       <<: *service-deps
       mysql:

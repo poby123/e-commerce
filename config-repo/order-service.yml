@@ -10,6 +10,8 @@ ecommerce:
   clients:
     product:
       read-timeout: 2s
-    inventory:
-      # Kept short on purpose: a slow inventory leaves the order PENDING (the gap the step 3 Saga closes).
-      read-timeout: 3s
+  saga:
+    # No reply within this time: resend the step's command (receivers are idempotent), up to max-attempts sends,
+    # then compensate. tok_slow (15 s at the mock PG) shows a retry that still completes.
+    step-timeout: 10s
+    max-attempts: 3

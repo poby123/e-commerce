@@ -41,6 +41,18 @@ public class Order {
     @Column(name = "total_amount", nullable = false)
     private long totalAmount;
 
+    @Column(name = "user_coupon_id")
+    private Long userCouponId;
+
+    @Column(name = "discount_amount", nullable = false)
+    private long discountAmount;
+
+    @Column(name = "payment_amount")
+    private Long paymentAmount;
+
+    @Column(name = "payment_id", length = 64)
+    private String paymentId;
+
     @Column(name = "failure_reason", length = 50)
     private String failureReason;
 
@@ -60,11 +72,12 @@ public class Order {
     protected Order() {
     }
 
-    public static Order place(long userId, String idempotencyKey, List<OrderItem> items) {
+    public static Order place(long userId, String idempotencyKey, Long userCouponId, List<OrderItem> items) {
         Order order = new Order();
         order.orderId = UUID.randomUUID().toString();
         order.userId = userId;
         order.idempotencyKey = idempotencyKey;
+        order.userCouponId = userCouponId;
         order.status = OrderStatus.PENDING;
         items.forEach(order::addItem);
         order.totalAmount = items.stream().mapToLong(OrderItem::getLineAmount).sum();
@@ -76,15 +89,27 @@ public class Order {
         item.attachTo(this);
     }
 
-    public void confirm() {
+    public void applyDiscount(long discount) {
         requirePending();
-        status = OrderStatus.CONFIRMED;
+        this.discountAmount = discount;
     }
 
-    public void reject(String reason) {
+    /** What the customer pays: total minus the coupon discount. */
+    public long amountToPay() {
+        return totalAmount - discountAmount;
+    }
+
+    public void complete(String paymentId) {
         requirePending();
-        status = OrderStatus.REJECTED;
-        failureReason = reason;
+        this.paymentAmount = amountToPay();
+        this.paymentId = paymentId;
+        this.status = OrderStatus.COMPLETED;
+    }
+
+    public void cancel(String reason) {
+        requirePending();
+        this.status = OrderStatus.CANCELLED;
+        this.failureReason = reason;
     }
 
     private void requirePending() {
@@ -122,6 +147,18 @@ public class Order {
 
     public long getTotalAmount() {
         return totalAmount;
+    }
+
+    public Long getUserCouponId() {
+        return userCouponId;
+    }
+
+    public long getDiscountAmount() {
+        return discountAmount;
+    }
+
+    public Long getPaymentAmount() {
+        return paymentAmount;
     }
 
     public String getFailureReason() {
