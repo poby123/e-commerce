@@ -16,6 +16,9 @@ import java.lang.annotation.Target;
         "spring.cloud.config.enabled=false",
         "eureka.client.enabled=false",
         "ecommerce.jwt.allow-generated-key=true",
+        // No Kafka in these tests: messages are checked in the outbox table.
+        "spring.kafka.listener.auto-startup=false",
+        "spring.kafka.admin.auto-create=false",
 })
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration.class)

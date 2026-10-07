@@ -21,6 +21,7 @@ rootProject.name = "e-commerce"
 
 include(
     "common",
+    "messaging",
     "infra:discovery-server",
     "infra:config-server",
     "infra:gateway",
@@ -28,4 +29,6 @@ include(
     "services:product-service",
     "services:inventory-service",
     "services:order-service",
+    "services:coupon-service",
+    "services:payment-service",
 )

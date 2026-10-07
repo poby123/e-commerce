@@ -10,6 +10,7 @@ import com.ecommerce.inventory.internal.ReservationDtos.Item;
 import com.ecommerce.inventory.internal.ReservationDtos.ReservationResponse;
 import com.ecommerce.inventory.internal.ReservationDtos.ReserveRequest;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -28,12 +29,14 @@ public class ReservationService {
     private final StockRepository stockRepository;
     private final StockReservationRepository reservationRepository;
     private final TransactionTemplate transaction;
+    private final JdbcTemplate jdbc;
 
     public ReservationService(StockRepository stockRepository, StockReservationRepository reservationRepository,
-                              TransactionTemplate transaction) {
+                              TransactionTemplate transaction, JdbcTemplate jdbc) {
         this.stockRepository = stockRepository;
         this.reservationRepository = reservationRepository;
         this.transaction = transaction;
+        this.jdbc = jdbc;
     }
 
     public ReservationResponse reserve(ReserveRequest request) {
@@ -43,6 +46,9 @@ public class ReservationService {
                 List<StockReservation> existing = reservationRepository.findByOrderIdOrderByProductId(request.orderId());
                 if (!existing.isEmpty()) {
                     return replay(request.orderId(), existing);
+                }
+                if (releasedBeforeReserve(request.orderId())) {
+                    throw new BusinessException(InventoryErrorCode.RESERVATION_RELEASED);
                 }
                 // Claim the orderId first: a concurrent duplicate blocks on the unique key and then fails,
                 // before it has touched any stock row.
@@ -66,15 +72,27 @@ public class ReservationService {
         }
     }
 
-    /** Gives the stock back. Unknown orderId or already released: nothing to do. */
+    /**
+     * Gives the stock back; already released: nothing to do. If the reserve has not arrived yet, leaves a marker
+     * so it is rejected when it does.
+     */
     public void release(String orderId) {
         transaction.executeWithoutResult(status -> {
-            for (StockReservation reservation : reservationRepository.findByOrderIdOrderByProductId(orderId)) {
+            List<StockReservation> reservations = reservationRepository.findByOrderIdOrderByProductId(orderId);
+            if (reservations.isEmpty()) {
+                jdbc.update("INSERT IGNORE INTO released_orders (order_id, created_at) VALUES (?, NOW(6))", orderId);
+                return;
+            }
+            for (StockReservation reservation : reservations) {
                 if (reservationRepository.markReleased(reservation.getId()) == 1) {
                     stockRepository.increase(reservation.getProductId(), reservation.getQuantity());
                 }
             }
         });
+    }
+
+    private boolean releasedBeforeReserve(String orderId) {
+        return !jdbc.queryForList("SELECT 1 FROM released_orders WHERE order_id = ?", orderId).isEmpty();
     }
 
     private ReservationResponse replay(String orderId, List<StockReservation> reservations) {

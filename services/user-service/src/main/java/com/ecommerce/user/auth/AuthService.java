@@ -1,6 +1,9 @@
 package com.ecommerce.user.auth;
 
 import com.ecommerce.common.error.BusinessException;
+import com.ecommerce.messaging.Outbox;
+import com.ecommerce.messaging.contract.Topics;
+import com.ecommerce.messaging.contract.UserEvents;
 import com.ecommerce.user.api.UserResponse;
 import com.ecommerce.user.auth.AuthDtos.LoginRequest;
 import com.ecommerce.user.auth.AuthDtos.SignupRequest;
@@ -24,15 +27,17 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final AccessTokenIssuer accessTokenIssuer;
     private final RefreshTokenStore refreshTokenStore;
+    private final Outbox outbox;
     // Compared against when the email is unknown, so a miss costs as much time as a wrong password.
     private final String dummyPasswordHash;
 
     public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder,
-                       AccessTokenIssuer accessTokenIssuer, RefreshTokenStore refreshTokenStore) {
+                       AccessTokenIssuer accessTokenIssuer, RefreshTokenStore refreshTokenStore, Outbox outbox) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.accessTokenIssuer = accessTokenIssuer;
         this.refreshTokenStore = refreshTokenStore;
+        this.outbox = outbox;
         this.dummyPasswordHash = passwordEncoder.encode("timing-equalizer");
     }
 
@@ -45,10 +50,13 @@ public class AuthService {
         User user = User.register(email, passwordEncoder.encode(request.password()), request.name().strip());
         try {
             // flush so a concurrent signup with the same email hits the unique key here, not at commit.
-            return UserResponse.from(userRepository.saveAndFlush(user));
+            userRepository.saveAndFlush(user);
         } catch (DataIntegrityViolationException e) {
             throw new BusinessException(UserErrorCode.DUPLICATE_EMAIL);
         }
+        // Same transaction as the INSERT: the event exists if and only if the user does.
+        outbox.send(Topics.USER_EVENTS, String.valueOf(user.getId()), new UserEvents.UserRegistered(user.getId()));
+        return UserResponse.from(user);
     }
 
     @Transactional(readOnly = true)

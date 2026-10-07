@@ -34,7 +34,6 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -43,6 +42,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "spring.cloud.config.enabled=false",
         "eureka.client.enabled=false",
         "spring.datasource.hikari.maximum-pool-size=30",
+        "spring.kafka.listener.auto-startup=false",
+        "spring.kafka.admin.auto-create=false",
 })
 @AutoConfigureMockMvc
 @Import(ReservationTest.Containers.class)
@@ -75,9 +76,7 @@ class ReservationTest {
         long a = productWithStock(10);
         long b = productWithStock(1);
 
-        reserve(UUID.randomUUID().toString(), Map.of(a, 3, b, 2))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value("INVENTORY-001"));
+        assertThat(reserve(UUID.randomUUID().toString(), Map.of(a, 3, b, 2))).isEqualTo("INVENTORY-001");
 
         // a was decremented before b failed; the rollback put it back.
         assertThat(stock(a)).isEqualTo(10);
@@ -89,8 +88,8 @@ class ReservationTest {
         long a = productWithStock(10);
         String orderId = UUID.randomUUID().toString();
 
-        reserve(orderId, Map.of(a, 3)).andExpect(status().isOk());
-        reserve(orderId, Map.of(a, 3)).andExpect(status().isOk()).andExpect(jsonPath("$.items[0].quantity").value(3));
+        assertThat(reserve(orderId, Map.of(a, 3))).isEqualTo("OK");
+        assertThat(reserve(orderId, Map.of(a, 3))).isEqualTo("OK");
 
         assertThat(stock(a)).isEqualTo(7);
     }
@@ -99,14 +98,25 @@ class ReservationTest {
     void releaseGivesStockBackOnceAndBlocksAReplay() throws Exception {
         long a = productWithStock(10);
         String orderId = UUID.randomUUID().toString();
-        reserve(orderId, Map.of(a, 4)).andExpect(status().isOk());
+        assertThat(reserve(orderId, Map.of(a, 4))).isEqualTo("OK");
 
-        mvc.perform(post("/internal/reservations/{id}/release", orderId)).andExpect(status().isNoContent());
-        mvc.perform(post("/internal/reservations/{id}/release", orderId)).andExpect(status().isNoContent());
+        reservationService.release(orderId);
+        reservationService.release(orderId);
         assertThat(stock(a)).isEqualTo(10);
 
         // A late retry of the original reserve must not take the stock again.
-        reserve(orderId, Map.of(a, 4)).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("INVENTORY-004"));
+        assertThat(reserve(orderId, Map.of(a, 4))).isEqualTo("INVENTORY-004");
+        assertThat(stock(a)).isEqualTo(10);
+    }
+
+    @Test
+    void releaseBeforeReserveMakesTheLateReserveFail() {
+        long a = productWithStock(10);
+        String orderId = UUID.randomUUID().toString();
+
+        reservationService.release(orderId);
+
+        assertThat(reserve(orderId, Map.of(a, 4))).isEqualTo("INVENTORY-004");
         assertThat(stock(a)).isEqualTo(10);
     }
 
@@ -177,11 +187,15 @@ class ReservationTest {
         mvc.perform(get("/api/inventory/{id}", id)).andExpect(jsonPath("$.quantity").value(5));
     }
 
-    private org.springframework.test.web.servlet.ResultActions reserve(String orderId, Map<Long, Integer> items) throws Exception {
-        List<Map<String, Object>> list = items.entrySet().stream()
-                .map(e -> Map.<String, Object>of("productId", e.getKey(), "quantity", e.getValue())).toList();
-        return mvc.perform(post("/internal/reservations").contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(Map.of("orderId", orderId, "items", list))));
+    /** "OK" or the error code. */
+    private String reserve(String orderId, Map<Long, Integer> items) {
+        try {
+            reservationService.reserve(new ReserveRequest(orderId,
+                    items.entrySet().stream().map(e -> new Item(e.getKey(), e.getValue())).toList()));
+            return "OK";
+        } catch (BusinessException e) {
+            return e.errorCode().code();
+        }
     }
 
     private long productWithStock(int quantity) {

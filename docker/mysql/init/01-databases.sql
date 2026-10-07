@@ -16,4 +16,16 @@ CREATE DATABASE IF NOT EXISTS order_db CHARACTER SET utf8mb4 COLLATE utf8mb4_090
 CREATE USER IF NOT EXISTS 'order_svc'@'%' IDENTIFIED BY 'order_svc_pw';
 GRANT ALL PRIVILEGES ON order_db.* TO 'order_svc'@'%';
 
+CREATE DATABASE IF NOT EXISTS coupon_db CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+CREATE USER IF NOT EXISTS 'coupon_svc'@'%' IDENTIFIED BY 'coupon_svc_pw';
+GRANT ALL PRIVILEGES ON coupon_db.* TO 'coupon_svc'@'%';
+
+CREATE DATABASE IF NOT EXISTS payment_db CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+CREATE USER IF NOT EXISTS 'payment_svc'@'%' IDENTIFIED BY 'payment_svc_pw';
+GRANT ALL PRIVILEGES ON payment_db.* TO 'payment_svc'@'%';
+
+-- Debezium reads the binlog (outbox tables only, see docker/debezium/outbox-connector.json).
+CREATE USER IF NOT EXISTS 'debezium'@'%' IDENTIFIED BY 'debezium_pw';
+GRANT SELECT, RELOAD, SHOW DATABASES, REPLICATION SLAVE, REPLICATION CLIENT ON *.* TO 'debezium'@'%';
+
 FLUSH PRIVILEGES;

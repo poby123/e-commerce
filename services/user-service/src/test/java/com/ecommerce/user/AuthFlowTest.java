@@ -32,6 +32,9 @@ class AuthFlowTest {
     @Autowired
     ObjectMapper objectMapper;
 
+    @Autowired
+    org.springframework.jdbc.core.JdbcTemplate jdbc;
+
     @Test
     void signupLoginAndReadOwnProfile() throws Exception {
         String email = uniqueEmail();
@@ -55,6 +58,29 @@ class AuthFlowTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.email").value(email))
                 .andExpect(jsonPath("$.role").value("USER"));
+    }
+
+    @Test
+    void signupWritesUserRegisteredToTheOutbox() throws Exception {
+        long userId = signup(uniqueEmail(), "password123").get("id").asLong();
+
+        var row = jdbc.queryForMap("SELECT aggregate_type, type, JSON_EXTRACT(payload, '$.userId') AS user_id FROM outbox WHERE aggregate_id = ?",
+                String.valueOf(userId));
+        assertThat(row.get("aggregate_type")).isEqualTo("user.events");
+        assertThat(row.get("type")).isEqualTo("UserRegistered");
+        assertThat(Long.parseLong(String.valueOf(row.get("user_id")))).isEqualTo(userId);
+    }
+
+    @Test
+    void failedSignupWritesNoEvent() throws Exception {
+        String email = uniqueEmail();
+        signup(email, "password123");
+        Integer before = jdbc.queryForObject("SELECT COUNT(*) FROM outbox", Integer.class);
+
+        postJson("/api/auth/signup", Map.of("email", email, "password", "password123", "name", "Kim"))
+                .andExpect(status().isConflict());
+
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM outbox", Integer.class)).isEqualTo(before);
     }
 
     @Test
