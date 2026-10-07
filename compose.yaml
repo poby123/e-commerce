@@ -106,6 +106,24 @@ services:
       connect:
         condition: service_healthy
 
+  # Search read model (ADR-0011). Image = official 8.18 + Nori (docker/elasticsearch/Dockerfile).
+  elasticsearch:
+    build: docker/elasticsearch
+    image: ecommerce-elasticsearch:8.18.8
+    environment:
+      discovery.type: single-node
+      # Local only. A real cluster keeps security on (TLS + credentials).
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+    mem_limit: 1536m
+    ports: [ "9200:9200" ]
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -fs http://localhost:9200/_cluster/health?wait_for_status=yellow\\&timeout=1s > /dev/null" ]
+      interval: 5s
+      retries: 40
+
   # ---- observability (ADR-0010): traces, metrics, logs
   zipkin:
     image: openzipkin/zipkin:3.4
@@ -213,6 +231,23 @@ services:
       mysql:
         condition: service_healthy
 
+  search-service:
+    <<: *service
+    build: { context: ., dockerfile: docker/Dockerfile, args: { MODULE: services/search-service } }
+    environment:
+      CONFIG_SERVER_URL: http://config-server:8888
+      EUREKA_URL: http://discovery-server:8761/eureka/
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      ZIPKIN_URL: http://zipkin:9411/api/v2/spans
+      LOKI_URL: http://loki:3100/loki/api/v1/push
+      SPRING_PROFILES_ACTIVE: loki
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+    depends_on:
+      <<: *service-deps
+      elasticsearch:
+        condition: service_healthy
+
 volumes:
   mysql-data:
   kafka-data:
+  es-data:

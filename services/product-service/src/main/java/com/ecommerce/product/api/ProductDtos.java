@@ -1,6 +1,7 @@
 package com.ecommerce.product.api;
 
 import com.ecommerce.product.domain.Product;
+import com.ecommerce.product.domain.ProductCategory;
 import com.ecommerce.product.domain.ProductStatus;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.NotBlank;
@@ -18,6 +19,8 @@ public final class ProductDtos {
     public record CreateProductRequest(
             @NotBlank @Size(max = 100) String name,
             @Size(max = 2000) String description,
+            @Size(max = 50) String brand,
+            ProductCategory category,
             @NotNull @Positive @Max(100_000_000) Long price
     ) {
     }
@@ -26,17 +29,19 @@ public final class ProductDtos {
     public record UpdateProductRequest(
             @Size(min = 1, max = 100) String name,
             @Size(max = 2000) String description,
+            @Size(max = 50) String brand,
+            ProductCategory category,
             @Positive @Max(100_000_000) Long price,
             ProductStatus status
     ) {
     }
 
-    public record ProductResponse(Long id, String name, String description, long price, ProductStatus status,
-                                  Instant createdAt) {
+    public record ProductResponse(Long id, String name, String description, String brand, ProductCategory category,
+                                  long price, ProductStatus status, Instant createdAt) {
 
         public static ProductResponse from(Product product) {
-            return new ProductResponse(product.getId(), product.getName(), product.getDescription(),
-                    product.getPrice(), product.getStatus(), product.getCreatedAt());
+            return new ProductResponse(product.getId(), product.getName(), product.getDescription(), product.getBrand(),
+                    product.getCategory(), product.getPrice(), product.getStatus(), product.getCreatedAt());
         }
     }
 }

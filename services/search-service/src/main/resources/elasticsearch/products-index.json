@@ -1,0 +1,188 @@
+{
+  "settings": {
+    "number_of_shards": 1,
+    "number_of_replicas": 0,
+    "analysis": {
+      "tokenizer": {
+        "ko_tokenizer": {
+          "type": "nori_tokenizer",
+          "decompound_mode": "mixed",
+          "discard_punctuation": true,
+          "user_dictionary_rules": [
+            "가습기",
+            "제습기",
+            "러닝화",
+            "무선충전기",
+            "에어프라이어",
+            "블루투스",
+            "보조배터리",
+            "공기청정기",
+            "스니커즈",
+            "운동화",
+            "이어셋",
+            "휴대폰",
+            "스마트폰",
+            "핸드폰",
+            "노트북",
+            "랩탑"
+          ]
+        }
+      },
+      "filter": {
+        "ko_pos": {
+          "type": "nori_part_of_speech",
+          "stoptags": [
+            "E",
+            "IC",
+            "J",
+            "MAG",
+            "MAJ",
+            "MM",
+            "SP",
+            "SSC",
+            "SSO",
+            "SC",
+            "SE",
+            "XPN",
+            "XSA",
+            "XSN",
+            "XSV",
+            "UNA",
+            "NA",
+            "VSV"
+          ]
+        },
+        "ko_synonyms": {
+          "type": "synonym_graph",
+          "synonyms": [
+            "이어폰, 이어셋",
+            "운동화, 러닝화, 스니커즈",
+            "노트북, 랩탑",
+            "핸드폰, 휴대폰, 스마트폰"
+          ]
+        },
+        "prefix": {
+          "type": "edge_ngram",
+          "min_gram": 1,
+          "max_gram": 20
+        },
+        "prefix_long": {
+          "type": "edge_ngram",
+          "min_gram": 1,
+          "max_gram": 30
+        }
+      },
+      "analyzer": {
+        "ko_index": {
+          "tokenizer": "ko_tokenizer",
+          "filter": [
+            "ko_pos",
+            "lowercase"
+          ]
+        },
+        "ko_search": {
+          "tokenizer": "ko_tokenizer",
+          "filter": [
+            "ko_pos",
+            "lowercase",
+            "ko_synonyms"
+          ]
+        },
+        "autocomplete_index": {
+          "tokenizer": "ko_tokenizer",
+          "filter": [
+            "lowercase",
+            "prefix"
+          ]
+        },
+        "autocomplete_search": {
+          "tokenizer": "whitespace",
+          "filter": [
+            "lowercase"
+          ]
+        },
+        "prefix_index": {
+          "char_filter": [
+            "remove_spaces"
+          ],
+          "tokenizer": "keyword",
+          "filter": [
+            "lowercase",
+            "prefix_long"
+          ]
+        },
+        "prefix_search": {
+          "char_filter": [
+            "remove_spaces"
+          ],
+          "tokenizer": "keyword",
+          "filter": [
+            "lowercase"
+          ]
+        }
+      },
+      "char_filter": {
+        "remove_spaces": {
+          "type": "pattern_replace",
+          "pattern": "\\s+",
+          "replacement": ""
+        }
+      }
+    }
+  },
+  "mappings": {
+    "dynamic": "strict",
+    "properties": {
+      "productId": {
+        "type": "long"
+      },
+      "name": {
+        "type": "text",
+        "analyzer": "ko_index",
+        "search_analyzer": "ko_search",
+        "fields": {
+          "autocomplete": {
+            "type": "text",
+            "analyzer": "autocomplete_index",
+            "search_analyzer": "autocomplete_search"
+          },
+          "raw": {
+            "type": "keyword"
+          },
+          "prefix": {
+            "type": "text",
+            "analyzer": "prefix_index",
+            "search_analyzer": "prefix_search"
+          }
+        }
+      },
+      "description": {
+        "type": "text",
+        "analyzer": "ko_index",
+        "search_analyzer": "ko_search"
+      },
+      "brand": {
+        "type": "keyword",
+        "fields": {
+          "text": {
+            "type": "text",
+            "analyzer": "ko_index",
+            "search_analyzer": "ko_search"
+          }
+        }
+      },
+      "category": {
+        "type": "keyword"
+      },
+      "price": {
+        "type": "long"
+      },
+      "status": {
+        "type": "keyword"
+      },
+      "createdAt": {
+        "type": "date"
+      }
+    }
+  }
+}

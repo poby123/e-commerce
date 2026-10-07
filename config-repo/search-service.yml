@@ -1,0 +1,3 @@
+spring:
+  elasticsearch:
+    uris: ${ELASTICSEARCH_URL:http://localhost:9200}

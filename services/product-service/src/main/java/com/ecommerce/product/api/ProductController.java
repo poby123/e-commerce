@@ -6,6 +6,7 @@ import com.ecommerce.product.api.ProductDtos.CreateProductRequest;
 import com.ecommerce.product.api.ProductDtos.ProductResponse;
 import com.ecommerce.product.api.ProductDtos.UpdateProductRequest;
 import com.ecommerce.product.domain.Product;
+import com.ecommerce.product.domain.ProductEvents;
 import com.ecommerce.product.domain.ProductRepository;
 import com.ecommerce.product.domain.ProductStatus;
 import com.ecommerce.product.error.ProductErrorCode;
@@ -31,9 +32,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class ProductController {
 
     private final ProductRepository productRepository;
+    private final ProductEvents events;
 
-    public ProductController(ProductRepository productRepository) {
+    public ProductController(ProductRepository productRepository, ProductEvents events) {
         this.productRepository = productRepository;
+        this.events = events;
     }
 
     @GetMapping
@@ -53,8 +56,10 @@ public class ProductController {
     @RequiresRole("ADMIN")
     @Transactional
     public ProductResponse create(@Valid @RequestBody CreateProductRequest request) {
-        Product product = new Product(request.name().strip(), request.description(), request.price());
-        return ProductResponse.from(productRepository.save(product));
+        Product product = productRepository.saveAndFlush(new Product(request.name().strip(), request.description(),
+                request.brand(), request.category(), request.price()));
+        events.changed(product);
+        return ProductResponse.from(product);
     }
 
     @PatchMapping("/{id}")
@@ -62,7 +67,9 @@ public class ProductController {
     @Transactional
     public ProductResponse update(@PathVariable Long id, @Valid @RequestBody UpdateProductRequest request) {
         Product product = find(id);
-        product.update(request.name(), request.description(), request.price(), request.status());
+        product.update(request.name(), request.description(), request.brand(), request.category(), request.price(), request.status());
+        productRepository.flush(); // bumps the version the event carries
+        events.changed(product);
         return ProductResponse.from(product);
     }
 

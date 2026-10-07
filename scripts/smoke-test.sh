@@ -133,4 +133,29 @@ check "another user cannot see the order" 404 "$STATUS"
 call GET "/internal/products?ids=$PRODUCT_ID" "" -H "Authorization: Bearer $ACCESS"
 check "/internal/** is not reachable through the gateway" 404 "$STATUS"
 
+echo "-- search (CQRS read model)"
+UNIQUE="스모크$RANDOM$RANDOM"
+call POST /api/products "{\"name\":\"$UNIQUE 블루투스 스피커\",\"brand\":\"스모크랩\",\"category\":\"DIGITAL\",\"price\":30000}" -H "Authorization: Bearer $ADMIN"
+SEARCH_ID=$(jq -r .id <<<"$BODY")
+found() { # query expected-count -> waits for the index to catch up (near real time + event lag)
+  for _ in $(seq 1 30); do
+    call GET "/api/search/products?q=$(jq -rn --arg q "$1" '$q|@uri')&brand=%EC%8A%A4%EB%AA%A8%ED%81%AC%EB%9E%A9" ""
+    [[ "$(jq -r .total <<<"$BODY")" == "$2" ]] && return 0
+    sleep 0.5
+  done
+}
+START=$(date +%s%N); found "$UNIQUE" 1
+check "new product is searchable (no login needed)" 1 "$(jq -r .total <<<"$BODY")"
+echo "       indexed after $(( ($(date +%s%N) - START) / 1000000 )) ms"
+found "${UNIQUE}블루투스스피커" 1
+check "Korean query without spaces matches" 1 "$(jq -r .total <<<"$BODY")"
+call PATCH "/api/products/$SEARCH_ID" '{"price":25000}' -H "Authorization: Bearer $ADMIN"
+for _ in $(seq 1 30); do found "$UNIQUE" 1; [[ "$(jq -r '.items[0].price' <<<"$BODY")" == 25000 ]] && break; sleep 0.5; done
+check "price change reaches the index" 25000 "$(jq -r '.items[0].price' <<<"$BODY")"
+call GET "/api/search/autocomplete?q=$(jq -rn --arg q "$UNIQUE" '$q|@uri')" ""
+check "autocomplete suggests it" "$UNIQUE 블루투스 스피커" "$(jq -r '.[0]' <<<"$BODY")"
+call PATCH "/api/products/$SEARCH_ID" '{"status":"SUSPENDED"}' -H "Authorization: Bearer $ADMIN"
+found "$UNIQUE" 0
+check "suspended product disappears from search" 0 "$(jq -r .total <<<"$BODY")"
+
 echo "all $PASS checks passed"

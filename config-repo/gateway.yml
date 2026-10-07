@@ -52,6 +52,13 @@ spring:
               filters:
                 - name: CircuitBreaker
                   args: { name: coupon-service, fallbackUri: "forward:/fallback/unavailable" }
+            - id: search-service
+              uri: lb://search-service
+              predicates:
+                - Path=/api/search/**
+              filters:
+                - name: CircuitBreaker
+                  args: { name: search-service, fallbackUri: "forward:/fallback/unavailable" }
             - id: order-service
               uri: lb://order-service
               predicates:

@@ -28,8 +28,10 @@
 | `services/order-service` | 8084 | ✅ 주문 접수 + **OrderSaga 오케스트레이터**, 타임아웃 잡 |
 | `services/coupon-service` | 8085 | ✅ 정책·발급, Saga 참여자(예약/확정/복구), 가입 축하 쿠폰(이벤트 구독) |
 | `services/payment-service` | 8086 | ✅ Mock PG(`tok_approve`/`tok_decline`/`tok_slow`), 멱등 결제·취소 |
+| `services/search-service` | 8087 | ✅ Elasticsearch 읽기 모델(CQRS): 한국어 검색(Nori), 다중 facet, 자동완성, 무중단 재색인 |
 | `messaging` | — | Transactional Outbox, 멱등 Consumer, DLT, 메시지 계약 |
 | Kafka 3.9 (KRaft) + Debezium 3.0 | 29092 / 18083 | ✅ Outbox 테이블 → binlog → Kafka |
+| Elasticsearch 8.18 + Nori | 9200 | ✅ `docker/elasticsearch` (compose로 빌드) |
 | Grafana / Prometheus / Zipkin / Loki | 3000 / 9090 / 9411 / 13100 | ✅ 대시보드, Eureka로 대상 자동 발견, 서비스 간 트레이스, traceId로 로그 검색 |
 | `common` | — | 공통 에러 포맷, `AuthHeaders`, `@CurrentUserId` |
 
@@ -50,6 +52,8 @@ scripts/smoke-test.sh                  # gateway를 통한 E2E 31개 항목 (인
 scripts/demo-failures.sh               # 장애 재현: Debezium 중단(유실 없음), inventory 정지(타임아웃 → 보상)
 load-test/run.sh                       # 4단계 부하 테스트(k6, 약 2분) → load-test/results/summary.md
 scripts/demo-resilience.sh             # product 정지 → Circuit OPEN(0.01초 실패) → 자동 복구, 로그인 Rate Limit
+scripts/seed-products.sh               # 한국어 상품 35개(검색 시연용)
+scripts/demo-reindex.sh                # 검색·수정이 계속되는 중에 무중단 재색인
 ```
 
 - Grafana: http://localhost:3000 (익명 조회 가능, admin/admin). 로그 패널의 traceId를 누르면 Zipkin 트레이스로 이동
@@ -89,6 +93,8 @@ scripts/demo-resilience.sh             # product 정지 → Circuit OPEN(0.01초
 | POST | `/api/coupon-policies/{id}/claim` | Bearer | 선착순 쿠폰(`firstCome` 정책). Redis에서 즉시 판정(202/409), DB에는 비동기 저장 |
 | GET | `/api/coupons/me` | Bearer | 내 쿠폰 |
 | GET | `/api/orders`, `/api/orders/{orderId}` | Bearer | 내 주문 목록·상세(남의 주문은 404) |
+| GET | `/api/search/products` | – | 검색. `q`, `category`·`brand`(여러 개), `minPrice`/`maxPrice`, `sort`(RELEVANCE/PRICE_ASC/PRICE_DESC/NEWEST). facet 포함 |
+| GET | `/api/search/autocomplete` | – | 자동완성(`q`) |
 
 서비스 간 API는 `/internal/**`이고 gateway 라우트가 없어 외부에서 호출할 수 없다.
 
@@ -101,7 +107,8 @@ scripts/demo-resilience.sh             # product 정지 → Circuit OPEN(0.01초
 - [x] **3. 쿠폰 + 하이브리드 Saga** — OrderSaga 오케스트레이터(쿠폰→재고→결제, 역순 보상), Outbox(Debezium), 멱등 Consumer, Mock PG, 가입 축하 쿠폰(코레오그래피). [ADR-0008](docs/adr/0008-order-saga-implementation.md)
 - [x] **4. 동시성** — 재고 차감 4방식 k6 비교, 선착순 쿠폰(Redis Lua + Kafka) 처리량 3.2배. [ADR-0009](docs/adr/0009-concurrency-strategies.md)
 - [x] **5. 장애 격리·관측성** — Resilience4j(order→product, Gateway), Redis Rate Limiter, 주문 하나가 6개 서비스를 거치는 하나의 트레이스, Prometheus/Grafana, Loki. [ADR-0010](docs/adr/0010-resilience-and-observability.md)
-- [ ] 6. (선택) Elasticsearch CQRS, K8s/Helm, GitHub Actions
+- [x] **6a. 검색(CQRS)** — Elasticsearch + Nori, external version 기반 멱등 색인, 다중 facet, 자동완성, 무중단 재색인. [ADR-0011](docs/adr/0011-search-cqrs.md)
+- [ ] 6b. (선택) 하이브리드(벡터) 검색 · K8s/Helm · GitHub Actions
 
 ## 설계 결정 (ADR)
 
@@ -115,5 +122,6 @@ scripts/demo-resilience.sh             # product 정지 → Circuit OPEN(0.01초
 8. [OrderSaga 구현](docs/adr/0008-order-saga-implementation.md)
 9. [동시성: 재고 차감 방식 비교와 선착순 쿠폰](docs/adr/0009-concurrency-strategies.md)
 10. [장애 격리와 관측성](docs/adr/0010-resilience-and-observability.md)
+11. [상품 검색: Elasticsearch 읽기 모델 (CQRS)](docs/adr/0011-search-cqrs.md)
 
 개발 중 겪은 문제와 해결: [docs/troubleshooting.md](docs/troubleshooting.md)

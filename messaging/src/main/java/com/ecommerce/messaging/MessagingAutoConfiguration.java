@@ -22,33 +22,12 @@ import org.springframework.util.backoff.ExponentialBackOff;
 
 import java.io.UncheckedIOException;
 
+/**
+ * Kafka error handling and topics for every service; the outbox and the idempotent-consumer guard only for
+ * services with a database (search-service has none: Elasticsearch's external versions de-duplicate for it).
+ */
 @AutoConfiguration(after = {JdbcTemplateAutoConfiguration.class, KafkaAutoConfiguration.class})
-@ConditionalOnClass(JdbcTemplate.class)
 public class MessagingAutoConfiguration {
-
-    @Bean
-    @ConditionalOnBean(JdbcTemplate.class)
-    Outbox outbox(JdbcTemplate jdbcTemplate, ObjectMapper objectMapper, ObjectProvider<TraceContext> traceContext) {
-        TraceContext context = traceContext.getIfAvailable();
-        return new Outbox(jdbcTemplate, objectMapper, context != null ? context::currentTraceparent : () -> "");
-    }
-
-    /** Only when Micrometer Tracing is on the classpath. */
-    @Configuration(proxyBeanMethods = false)
-    @ConditionalOnClass(name = "io.micrometer.tracing.Tracer")
-    static class Tracing {
-        @Bean
-        @ConditionalOnBean(type = {"io.micrometer.tracing.Tracer", "io.micrometer.tracing.propagation.Propagator"})
-        TraceContext traceContext(io.micrometer.tracing.Tracer tracer, io.micrometer.tracing.propagation.Propagator propagator) {
-            return new TraceContext(tracer, propagator);
-        }
-    }
-
-    @Bean
-    @ConditionalOnBean(JdbcTemplate.class)
-    ProcessedMessages processedMessages(JdbcTemplate jdbcTemplate) {
-        return new ProcessedMessages(jdbcTemplate);
-    }
 
     /**
      * Boot wires this into the default listener container factory. A failing message is retried with backoff
@@ -72,5 +51,34 @@ public class MessagingAutoConfiguration {
         return new KafkaAdmin.NewTopics(Topics.ALL.stream()
                 .map(name -> TopicBuilder.name(name).partitions(3).replicas(1).build())
                 .toArray(NewTopic[]::new));
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnClass(JdbcTemplate.class)
+    static class Jdbc {
+
+        @Bean
+        @ConditionalOnBean(JdbcTemplate.class)
+        Outbox outbox(JdbcTemplate jdbcTemplate, ObjectMapper objectMapper, ObjectProvider<TraceContext> traceContext) {
+            TraceContext context = traceContext.getIfAvailable();
+            return new Outbox(jdbcTemplate, objectMapper, context != null ? context::currentTraceparent : () -> "");
+        }
+
+        @Bean
+        @ConditionalOnBean(JdbcTemplate.class)
+        ProcessedMessages processedMessages(JdbcTemplate jdbcTemplate) {
+            return new ProcessedMessages(jdbcTemplate);
+        }
+    }
+
+    /** Only when Micrometer Tracing is on the classpath. */
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnClass(name = "io.micrometer.tracing.Tracer")
+    static class Tracing {
+        @Bean
+        @ConditionalOnBean(type = {"io.micrometer.tracing.Tracer", "io.micrometer.tracing.propagation.Propagator"})
+        TraceContext traceContext(io.micrometer.tracing.Tracer tracer, io.micrometer.tracing.propagation.Propagator propagator) {
+            return new TraceContext(tracer, propagator);
+        }
     }
 }

@@ -31,4 +31,5 @@ include(
     "services:order-service",
     "services:coupon-service",
     "services:payment-service",
+    "services:search-service",
 )

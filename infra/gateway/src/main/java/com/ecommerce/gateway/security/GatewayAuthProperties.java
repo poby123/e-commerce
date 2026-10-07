@@ -14,6 +14,6 @@ import java.util.List;
 public record GatewayAuthProperties(
         @DefaultValue("http://user-service/.well-known/jwks.json") String jwkSetUri,
         @DefaultValue("ecommerce-auth") String issuer,
-        @DefaultValue({"/api/auth/**", "GET /api/products/**", "/actuator/health/**", "/actuator/info"}) List<String> publicPaths
+        @DefaultValue({"/api/auth/**", "GET /api/products/**", "GET /api/search/**", "/actuator/health/**", "/actuator/info"}) List<String> publicPaths
 ) {
 }

@@ -10,6 +10,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 
 import java.time.Instant;
 
@@ -28,12 +29,23 @@ public class Product {
     @Column(length = 2000)
     private String description;
 
+    @Column(nullable = false, length = 50)
+    private String brand;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private ProductCategory category;
+
     @Column(nullable = false)
     private long price;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private ProductStatus status;
+
+    /** Optimistic lock, and the search index's external version (see V2 migration). */
+    @Version
+    private long version;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -44,14 +56,22 @@ public class Product {
     protected Product() {
     }
 
-    public Product(String name, String description, long price) {
+    public Product(String name, String description, String brand, ProductCategory category, long price) {
         this.name = name;
         this.description = description;
+        this.brand = brand == null ? "" : brand;
+        this.category = category == null ? ProductCategory.ETC : category;
         this.price = price;
         this.status = ProductStatus.ON_SALE;
     }
 
-    public void update(String name, String description, Long price, ProductStatus status) {
+    public void update(String name, String description, String brand, ProductCategory category, Long price, ProductStatus status) {
+        if (brand != null) {
+            this.brand = brand;
+        }
+        if (category != null) {
+            this.category = category;
+        }
         if (name != null) {
             this.name = name;
         }
@@ -87,6 +107,18 @@ public class Product {
 
     public String getDescription() {
         return description;
+    }
+
+    public String getBrand() {
+        return brand;
+    }
+
+    public ProductCategory getCategory() {
+        return category;
+    }
+
+    public long getVersion() {
+        return version;
     }
 
     public long getPrice() {

@@ -1,0 +1,32 @@
+# Settings that are part of how the service works live here.
+# Settings that change per environment (Elasticsearch address) live in config-repo/search-service.yml.
+server:
+  port: 8087
+  shutdown: graceful
+
+spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+  application:
+    name: search-service
+  config:
+    import: "optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888}"
+  kafka:
+    consumer:
+      group-id: ${spring.application.name}
+      auto-offset-reset: earliest
+    listener:
+      ack-mode: record
+      observation-enabled: true
+    template:
+      observation-enabled: true
+  # spring-kafka brings spring-retry, which would turn on the load balancer's own retry (troubleshooting #10).
+  cloud:
+    loadbalancer:
+      retry:
+        enabled: false
+
+management:
+  tracing:
+    sampling:
+      probability: 0.0

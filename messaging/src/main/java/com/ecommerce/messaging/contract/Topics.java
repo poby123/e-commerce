@@ -17,10 +17,12 @@ public final class Topics {
     public static final String COUPON_CLAIM = "coupon.claim";
 
     public static final String USER_EVENTS = "user.events";
+    /** Product catalog changes, consumed by search-service (CQRS read model). */
+    public static final String PRODUCT_EVENTS = "product.events";
     public static final String ORDER_EVENTS = "order.events";
 
     public static final List<String> ALL = List.of(COUPON_COMMAND, INVENTORY_COMMAND, PAYMENT_COMMAND, ORDER_SAGA_REPLY,
-            COUPON_CLAIM, USER_EVENTS, ORDER_EVENTS);
+            COUPON_CLAIM, USER_EVENTS, ORDER_EVENTS, PRODUCT_EVENTS);
 
     private Topics() {
     }

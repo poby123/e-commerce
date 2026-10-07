@@ -25,7 +25,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest(properties = {"spring.cloud.config.enabled=false", "eureka.client.enabled=false"})
+@SpringBootTest(properties = {"spring.cloud.config.enabled=false", "eureka.client.enabled=false",
+        "spring.kafka.listener.auto-startup=false", "spring.kafka.admin.auto-create=false"})
 @AutoConfigureMockMvc
 @Import(ProductApiTest.Containers.class)
 class ProductApiTest {
@@ -92,6 +93,37 @@ class ProductApiTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(2))
                 .andExpect(jsonPath("$[?(@.id == " + b + ")].price").value(2_000));
+    }
+
+    @Autowired
+    org.springframework.jdbc.core.JdbcTemplate jdbc;
+
+    @Test
+    void everyChangePublishesTheFullStateWithAGrowingVersion() throws Exception {
+        long id = create("Lamp", 30_000);
+        mvc.perform(asAdmin(json(patch("/api/products/{id}", id), Map.of("price", 25_000, "brand", "Lumi", "category", "LIVING"))))
+                .andExpect(status().isOk());
+
+        var events = jdbc.queryForList("""
+                SELECT JSON_EXTRACT(payload, '$.version') AS version, JSON_EXTRACT(payload, '$.price') AS price,
+                       JSON_UNQUOTE(JSON_EXTRACT(payload, '$.category')) AS category
+                FROM outbox WHERE aggregate_type = 'product.events' AND aggregate_id = ? ORDER BY seq""", String.valueOf(id));
+        org.assertj.core.api.Assertions.assertThat(events).hasSize(2);
+        org.assertj.core.api.Assertions.assertThat(String.valueOf(events.get(1).get("price"))).isEqualTo("25000");
+        org.assertj.core.api.Assertions.assertThat(String.valueOf(events.get(1).get("category"))).isEqualTo("LIVING");
+        org.assertj.core.api.Assertions.assertThat(Long.parseLong(String.valueOf(events.get(1).get("version"))))
+                .isGreaterThan(Long.parseLong(String.valueOf(events.get(0).get("version"))));
+    }
+
+    @Test
+    void exportPagesThroughAllProductsByKeyset() throws Exception {
+        long a = create("Export A", 1_000);
+        long b = create("Export B", 2_000);
+        mvc.perform(get("/internal/products/export").param("afterId", String.valueOf(a - 1)).param("size", "1"))
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].productId").value(a));
+        mvc.perform(get("/internal/products/export").param("afterId", String.valueOf(a)).param("size", "10"))
+                .andExpect(jsonPath("$[0].productId").value(b));
     }
 
     @Test

@@ -61,3 +61,19 @@
 ## 12. 재시작 직후 Debezium 커넥터 등록 실패
 - **원인**: Kafka Connect가 헬스체크(`GET /connectors`)에는 응답하지만, 내부 리밸런싱 중에는 설정 변경을 거절했다. 그 결과 `connect-init`이 실패했고, 거기에 의존하는 서비스 9개가 "Created" 상태로 멈췄다.
 - **해결**: 등록 스크립트가 재시도하고, 커넥터 task가 RUNNING이 될 때까지 기다린다.
+
+## 13. `docker build`만 권한 오류 (6단계)
+- **증상**: `open ~/.docker/buildx/activity/desktop-linux: permission denied`
+- **원인**: 그 파일의 소유자가 root였다(과거에 sudo로 docker를 실행한 흔적). compose 빌드는 다른 경로를 써서 영향이 없었다.
+- **조치**: ES 이미지는 compose 서비스로 정의해 compose로 빌드하고, 테스트는 Testcontainers가 Docker API로 직접 빌드한다. 근본 해결은 `sudo chown $(whoami) ~/.docker/buildx/activity/desktop-linux`(사용자 확인 필요).
+
+## 14. 한국어 검색 사전 (6단계)
+사용자 사전 누락, 동의어 분석 실패, 동의어 과확장, 자동완성 재분석과 띄어쓰기 문제. ADR-0011의 표에 정리했다. 원칙은 두 가지다. **동의어에 쓰는 단어는 사용자 사전에도 등록한다. 입력 중인 글자는 형태소 분석하지 않는다.**
+
+## 15. ES 클라이언트가 `Instant`를 직렬화하지 못함
+- **원인**: Elasticsearch Java 클라이언트는 Boot의 ObjectMapper가 아니라 자체 기본 매퍼를 썼다.
+- **해결**: Boot ObjectMapper의 복사본으로 `JacksonJsonpMapper` 빈을 만들었다.
+
+## 16. 오래된 이벤트 무시가 예외로 터짐
+- **원인**: 버전 충돌(409)이 `ElasticsearchException`이 아니라 저수준 `ResponseException`으로 올라왔다. 이 예외는 `IOException`의 하위 타입이라 catch에 걸리지 않았다.
+- **해결**: 세 가지 형태(ElasticsearchException, TransportException, ResponseException)를 모두 409로 판별한다. `anOlderOrRepeatedEventNeverOverwritesANewerOne`이 고정한다.
