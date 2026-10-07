@@ -30,6 +30,7 @@
 | `services/payment-service` | 8086 | ✅ Mock PG(`tok_approve`/`tok_decline`/`tok_slow`), 멱등 결제·취소 |
 | `messaging` | — | Transactional Outbox, 멱등 Consumer, DLT, 메시지 계약 |
 | Kafka 3.9 (KRaft) + Debezium 3.0 | 29092 / 18083 | ✅ Outbox 테이블 → binlog → Kafka |
+| Grafana / Prometheus / Zipkin / Loki | 3000 / 9090 / 9411 / 13100 | ✅ 대시보드, Eureka로 대상 자동 발견, 서비스 간 트레이스, traceId로 로그 검색 |
 | `common` | — | 공통 에러 포맷, `AuthHeaders`, `@CurrentUserId` |
 
 ## 스택
@@ -48,8 +49,11 @@ docker compose --profile app up -d --build
 scripts/smoke-test.sh                  # gateway를 통한 E2E 31개 항목 (인증 + 주문 Saga)
 scripts/demo-failures.sh               # 장애 재현: Debezium 중단(유실 없음), inventory 정지(타임아웃 → 보상)
 load-test/run.sh                       # 4단계 부하 테스트(k6, 약 2분) → load-test/results/summary.md
+scripts/demo-resilience.sh             # product 정지 → Circuit OPEN(0.01초 실패) → 자동 복구, 로그인 Rate Limit
 ```
 
+- Grafana: http://localhost:3000 (익명 조회 가능, admin/admin). 로그 패널의 traceId를 누르면 Zipkin 트레이스로 이동
+- Zipkin: http://localhost:9411 · Prometheus: http://localhost:9090
 - Eureka 대시보드: http://localhost:8761
 - 서비스 설정 확인: http://localhost:8888/user-service/default
 - 관리자 계정(로컬): `admin@ecommerce.local` / `admin1234!` (`config-repo/user-service.yml`)
@@ -96,7 +100,7 @@ load-test/run.sh                       # 4단계 부하 테스트(k6, 약 2분) 
 - [x] **2. 상품·재고·주문** — 동기 호출로 주문 1건이 끝까지 성공. 타임아웃 시 PENDING에 묶이는 문제를 재현해 둠([ADR-0007](docs/adr/0007-sync-order-flow-gap.md))
 - [x] **3. 쿠폰 + 하이브리드 Saga** — OrderSaga 오케스트레이터(쿠폰→재고→결제, 역순 보상), Outbox(Debezium), 멱등 Consumer, Mock PG, 가입 축하 쿠폰(코레오그래피). [ADR-0008](docs/adr/0008-order-saga-implementation.md)
 - [x] **4. 동시성** — 재고 차감 4방식 k6 비교, 선착순 쿠폰(Redis Lua + Kafka) 처리량 3.2배. [ADR-0009](docs/adr/0009-concurrency-strategies.md)
-- [ ] **5. 장애 격리·관측성** — Resilience4j, Micrometer Tracing + Zipkin, Prometheus/Grafana, Loki
+- [x] **5. 장애 격리·관측성** — Resilience4j(order→product, Gateway), Redis Rate Limiter, 주문 하나가 6개 서비스를 거치는 하나의 트레이스, Prometheus/Grafana, Loki. [ADR-0010](docs/adr/0010-resilience-and-observability.md)
 - [ ] 6. (선택) Elasticsearch CQRS, K8s/Helm, GitHub Actions
 
 ## 설계 결정 (ADR)
@@ -110,5 +114,6 @@ load-test/run.sh                       # 4단계 부하 테스트(k6, 약 2분) 
 7. [동기 주문 흐름과 의도적으로 남긴 문제](docs/adr/0007-sync-order-flow-gap.md) — 3단계에서 해결
 8. [OrderSaga 구현](docs/adr/0008-order-saga-implementation.md)
 9. [동시성: 재고 차감 방식 비교와 선착순 쿠폰](docs/adr/0009-concurrency-strategies.md)
+10. [장애 격리와 관측성](docs/adr/0010-resilience-and-observability.md)
 
 개발 중 겪은 문제와 해결: [docs/troubleshooting.md](docs/troubleshooting.md)

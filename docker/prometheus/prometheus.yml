@@ -1,0 +1,24 @@
+global:
+  scrape_interval: 5s
+
+scrape_configs:
+  # Every instance registered in Eureka, found automatically: a new service or a second replica needs no change here.
+  - job_name: services
+    metrics_path: /actuator/prometheus
+    eureka_sd_configs:
+      - server: http://discovery-server:8761/eureka
+        refresh_interval: 10s
+    relabel_configs:
+      # Instances that publish a separate management port (the gateway) are scraped there.
+      - source_labels: [__meta_eureka_app_instance_ip_addr, __meta_eureka_app_instance_metadata_management_port]
+        regex: (.+);(\d+)
+        replacement: $1:$2
+        target_label: __address__
+      # The metrics carry their own "application" label; keep Eureka's name separately.
+      - source_labels: [__meta_eureka_app_instance_id]
+        target_label: instance
+
+  - job_name: infra
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: [ discovery-server:8761, config-server:8888 ]

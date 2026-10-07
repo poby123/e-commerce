@@ -3,12 +3,14 @@ package com.ecommerce.messaging;
 import com.ecommerce.messaging.contract.Topics;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.kafka.clients.admin.NewTopic;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.jdbc.JdbcTemplateAutoConfiguration;
 import org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.config.TopicBuilder;
 import org.springframework.kafka.core.KafkaAdmin;
@@ -26,8 +28,20 @@ public class MessagingAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(JdbcTemplate.class)
-    Outbox outbox(JdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
-        return new Outbox(jdbcTemplate, objectMapper);
+    Outbox outbox(JdbcTemplate jdbcTemplate, ObjectMapper objectMapper, ObjectProvider<TraceContext> traceContext) {
+        TraceContext context = traceContext.getIfAvailable();
+        return new Outbox(jdbcTemplate, objectMapper, context != null ? context::currentTraceparent : () -> "");
+    }
+
+    /** Only when Micrometer Tracing is on the classpath. */
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnClass(name = "io.micrometer.tracing.Tracer")
+    static class Tracing {
+        @Bean
+        @ConditionalOnBean(type = {"io.micrometer.tracing.Tracer", "io.micrometer.tracing.propagation.Propagator"})
+        TraceContext traceContext(io.micrometer.tracing.Tracer tracer, io.micrometer.tracing.propagation.Propagator propagator) {
+            return new TraceContext(tracer, propagator);
+        }
     }
 
     @Bean

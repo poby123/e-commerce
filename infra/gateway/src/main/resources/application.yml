@@ -10,3 +10,18 @@ spring:
   config:
     # Routes and environment-specific values come from config-server (config-repo/gateway.yml).
     import: "optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888}"
+
+eureka:
+  instance:
+    # Tells Prometheus (eureka_sd_configs) where the metrics are; see docker/prometheus/prometheus.yml.
+    metadata-map:
+      management.port: ${management.server.port}
+
+management:
+  # Actuator on its own port, reachable only inside the network: the gateway's main port is public, and
+  # /actuator/prometheus must not be served to the internet.
+  server:
+    port: 8090
+  tracing:
+    sampling:
+      probability: 0.0

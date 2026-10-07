@@ -1,6 +1,7 @@
 package com.ecommerce.gateway.security;
 
 import org.springframework.cloud.client.loadbalancer.LoadBalanced;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -15,6 +16,8 @@ import org.springframework.security.oauth2.server.resource.authentication.Reacti
 import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.security.web.server.context.NoOpServerSecurityContextRepository;
 import org.springframework.security.web.server.savedrequest.NoOpServerRequestCache;
+import org.springframework.security.web.server.util.matcher.ServerWebExchangeMatcher;
+import org.springframework.security.web.server.util.matcher.ServerWebExchangeMatcher.MatchResult;
 import org.springframework.web.reactive.function.client.WebClient;
 
 /**
@@ -28,7 +31,8 @@ public class SecurityConfig {
     @Bean
     SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http,
                                                   GatewayAuthProperties properties,
-                                                  JsonErrorHandlers errorHandlers) {
+                                                  JsonErrorHandlers errorHandlers,
+                                                  @Value("${management.server.port:-1}") int managementPort) {
         return http
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)
                 .httpBasic(ServerHttpSecurity.HttpBasicSpec::disable)
@@ -38,6 +42,8 @@ public class SecurityConfig {
                 .securityContextRepository(NoOpServerSecurityContextRepository.getInstance())
                 .requestCache(cache -> cache.requestCache(NoOpServerRequestCache.getInstance()))
                 .authorizeExchange(exchange -> {
+                    // Actuator's own port is internal (not published by compose); Prometheus scrapes it there.
+                    exchange.matchers(onPort(managementPort)).permitAll();
                     properties.publicPaths().forEach(entry -> permit(exchange, entry));
                     exchange.anyExchange().authenticated();
                 })
@@ -48,6 +54,13 @@ public class SecurityConfig {
                         .authenticationEntryPoint(errorHandlers)
                         .accessDeniedHandler(errorHandlers))
                 .build();
+    }
+
+    private static ServerWebExchangeMatcher onPort(int port) {
+        return exchange -> {
+            var local = exchange.getRequest().getLocalAddress();
+            return local != null && local.getPort() == port ? MatchResult.match() : MatchResult.notMatch();
+        };
     }
 
     /** "GET /api/products/**" permits one method, "/api/auth/**" permits all. */

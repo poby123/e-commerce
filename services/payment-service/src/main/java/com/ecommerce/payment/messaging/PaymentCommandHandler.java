@@ -35,6 +35,8 @@ import java.util.Optional;
 @Component
 public class PaymentCommandHandler {
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(PaymentCommandHandler.class);
+
     private final PaymentGateway paymentGateway;
     private final Payments payments;
     private final ProcessedMessages processedMessages;
@@ -116,6 +118,8 @@ public class PaymentCommandHandler {
     }
 
     private void reply(Payment payment) {
+        log.info("Payment for order {}: {}{}", payment.orderId(), payment.status(),
+                payment.failureReason() == null ? "" : " (" + payment.failureReason() + ")");
         Object reply = payment.status() == Status.APPROVED
                 ? new PaymentCompleted(payment.orderId(), payment.pgTransaction())
                 : new PaymentFailed(payment.orderId(), payment.status() == Status.CANCELLED ? "CANCELLED" : payment.failureReason());

@@ -15,3 +15,9 @@ spring:
     open-in-view: false
     hibernate:
       ddl-auto: validate
+
+# Without config-server (tests, a bare run) nothing is sampled; config-repo turns sampling on per environment.
+management:
+  tracing:
+    sampling:
+      probability: 0.0

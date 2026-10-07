@@ -21,3 +21,9 @@ spring:
         # Stable JSON for Page responses (content + page metadata) instead of serializing PageImpl.
         serialization-mode: via_dto
         max-page-size: 100
+
+# Without config-server (tests, a bare run) nothing is sampled; config-repo turns sampling on per environment.
+management:
+  tracing:
+    sampling:
+      probability: 0.0

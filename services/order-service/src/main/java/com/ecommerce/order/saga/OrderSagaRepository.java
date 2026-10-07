@@ -9,6 +9,8 @@ import java.util.List;
 
 public interface OrderSagaRepository extends JpaRepository<OrderSaga, String> {
 
+    long countByState(OrderSaga.State state);
+
     /**
      * Overdue sagas, locked. SKIP LOCKED lets several order-service instances run the timeout job at once:
      * each takes rows the others have not locked, instead of queuing behind them or doing the work twice.

@@ -18,6 +18,10 @@ spring:
     listener:
       # Commit each record's offset after its handler (and its DB transaction) finished.
       ack-mode: record
+      # A consumer span per record, continuing the trace from the record's traceparent header.
+      observation-enabled: true
+    template:
+      observation-enabled: true
   jpa:
     open-in-view: false
     hibernate:
@@ -29,7 +33,11 @@ spring:
         serialization-mode: via_dto
         max-page-size: 100
 
+spring.cloud.loadbalancer.retry.enabled: false
+
 # Fault isolation for the product lookup (client/ProductCatalog). 4xx answers are business results, not failures.
+# Retries happen here and only here: spring-kafka brings spring-retry, which silently turns on Spring Cloud
+# LoadBalancer's own retry of GETs (disabled above). Two layers meant 2 x 2 = 4 calls per lookup (troubleshooting #10).
 resilience4j:
   circuitbreaker:
     instances:
@@ -63,3 +71,9 @@ resilience4j:
       product:
         max-concurrent-calls: 50
         max-wait-duration: 0
+
+# Without config-server (tests, a bare run) nothing is sampled; config-repo turns sampling on per environment.
+management:
+  tracing:
+    sampling:
+      probability: 0.0

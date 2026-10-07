@@ -37,15 +37,18 @@ public class OrderSagaManager {
     private final ProcessedMessages processedMessages;
     private final SagaProperties properties;
     private final ObjectMapper objectMapper;
+    private final SagaMetrics metrics;
 
     public OrderSagaManager(OrderSagaRepository sagas, OrderRepository orders, Outbox outbox,
-                            ProcessedMessages processedMessages, SagaProperties properties, ObjectMapper objectMapper) {
+                            ProcessedMessages processedMessages, SagaProperties properties, ObjectMapper objectMapper,
+                            SagaMetrics metrics) {
         this.sagas = sagas;
         this.orders = orders;
         this.outbox = outbox;
         this.processedMessages = processedMessages;
         this.properties = properties;
         this.objectMapper = objectMapper;
+        this.metrics = metrics;
     }
 
     /** Called in the transaction that inserts the order. */
@@ -84,6 +87,8 @@ public class OrderSagaManager {
             // A reply to a resent command, or one that arrived after the saga gave up. Its effect is already
             // covered: compensation was sent when the saga cancelled.
             log.info("Ignored {} for saga {} at {}/{}", message.type(), sagaId, saga.getState(), saga.getStep());
+        } else if (saga.getState() != OrderSaga.State.RUNNING) {
+            finished(order, saga);
         }
         send(sagaId, out);
     }
@@ -95,9 +100,18 @@ public class OrderSagaManager {
         Order order = orders.findByOrderId(sagaId).orElseThrow();
         List<Outgoing> out = new ArrayList<>();
         saga.onTimeout(order, now, properties.stepTimeout(), properties.maxAttempts(), out);
+        if (saga.getState() != OrderSaga.State.RUNNING) {
+            finished(order, saga);
+        }
         log.warn("Saga {} timed out at {}: {}", sagaId, saga.getStep(), saga.getState() == OrderSaga.State.RUNNING
                 ? "resent (attempt " + saga.getAttempts() + ")" : "compensated");
         send(sagaId, out);
+    }
+
+    private void finished(Order order, OrderSaga saga) {
+        metrics.finished(order, saga.getState());
+        log.info("Order {} {}{}", order.getOrderId(), saga.getState(),
+                order.getFailureReason() == null ? "" : " (" + order.getFailureReason() + ")");
     }
 
     private void send(String sagaId, List<Outgoing> out) {

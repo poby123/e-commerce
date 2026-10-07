@@ -18,7 +18,17 @@ spring:
     listener:
       # Commit each record's offset after its handler (and its DB transaction) finished.
       ack-mode: record
+      # A consumer span per record, continuing the trace from the record's traceparent header.
+      observation-enabled: true
+    template:
+      observation-enabled: true
   jpa:
     open-in-view: false
     hibernate:
       ddl-auto: validate
+
+# Without config-server (tests, a bare run) nothing is sampled; config-repo turns sampling on per environment.
+management:
+  tracing:
+    sampling:
+      probability: 0.0

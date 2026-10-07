@@ -5,6 +5,7 @@ spring-cloud = "2025.0.3"
 # Same version Spring Security 6.5 uses for its JWT support.
 nimbus-jose-jwt = "9.37.4"
 wiremock = "3.13.1"
+loki4j = "1.6.0"
 
 [libraries]
 spring-boot-gradle-plugin = { module = "org.springframework.boot:spring-boot-gradle-plugin", version.ref = "spring-boot" }
@@ -12,3 +13,4 @@ spring-boot-dependencies = { module = "org.springframework.boot:spring-boot-depe
 spring-cloud-dependencies = { module = "org.springframework.cloud:spring-cloud-dependencies", version.ref = "spring-cloud" }
 nimbus-jose-jwt = { module = "com.nimbusds:nimbus-jose-jwt", version.ref = "nimbus-jose-jwt" }
 wiremock-standalone = { module = "org.wiremock:wiremock-standalone", version.ref = "wiremock" }
+loki-logback-appender = { module = "com.github.loki4j:loki-logback-appender", version.ref = "loki4j" }

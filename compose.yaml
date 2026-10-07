@@ -13,6 +13,9 @@ x-service: &service
     MYSQL_HOST: mysql
     MYSQL_PORT: 3306
     KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    ZIPKIN_URL: http://zipkin:9411/api/v2/spans
+    LOKI_URL: http://loki:3100/loki/api/v1/push
+    SPRING_PROFILES_ACTIVE: loki
     REDIS_HOST: redis
     REDIS_PORT: 6379
   depends_on: &service-deps
@@ -102,6 +105,35 @@ services:
     depends_on:
       connect:
         condition: service_healthy
+
+  # ---- observability (ADR-0010): traces, metrics, logs
+  zipkin:
+    image: openzipkin/zipkin:3.4
+    ports: [ "9411:9411" ]
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports: [ "9090:9090" ]
+
+  loki:
+    image: grafana/loki:3.3.2
+    # 13100 on the host: 3100 is often taken by local dev servers. Services push to loki:3100 inside the network.
+    ports: [ "13100:3100" ]
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/ecommerce-overview.json
+    volumes:
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports: [ "3000:3000" ]
+    depends_on: [ prometheus, loki, zipkin ]
 
   discovery-server:
     profiles: [ app ]

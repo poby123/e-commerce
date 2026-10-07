@@ -9,7 +9,9 @@ spring:
 ecommerce:
   clients:
     product:
-      read-timeout: 2s
+      # Timeout budget: 1 s x 2 attempts (retry) + 100 ms < the gateway's 5 s response timeout, so order-service
+      # answers its own 503 (ORDER-005) before the gateway gives up on it (troubleshooting #9).
+      read-timeout: 1s
   saga:
     # No reply within this time: resend the step's command (receivers are idempotent), up to max-attempts sends,
     # then compensate. tok_slow (15 s at the mock PG) shows a retry that still completes.

@@ -9,6 +9,7 @@ plugins {
 
 dependencies {
     "implementation"("org.springframework.boot:spring-boot-starter-actuator")
+    "runtimeOnly"("io.micrometer:micrometer-registry-prometheus")
 }
 
 // Only the executable jar, under a fixed name so docker/Dockerfile can copy it.

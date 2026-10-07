@@ -32,6 +32,7 @@ import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMoc
         "spring.kafka.admin.auto-create=false",
         "ecommerce.saga.timeout-job.enabled=false",
         "ecommerce.saga.max-attempts=2",
+        "ecommerce.clients.product.read-timeout=500ms",
 })
 @AutoConfigureMockMvc
 @Import(OrderTestSupport.Containers.class)

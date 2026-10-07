@@ -46,6 +46,15 @@ class ProductLookupResilienceTest extends OrderTestSupport {
     }
 
     @Test
+    void aFailingLookupIsCalledExactlyTwiceNotMore() {
+        // Guards against a second retry layer multiplying calls. A timeout, not a 500: the load balancer's
+        // retry (enabled by spring-retry on the classpath) only retries I/O errors.
+        services.stubFor(WireMock.get(urlPathEqualTo("/internal/products")).willReturn(okJson("[]").withFixedDelay(1_500)));
+        assertThatThrownBy(this::place).isInstanceOf(BusinessException.class);
+        services.verify(2, getRequestedFor(urlPathEqualTo("/internal/products")));
+    }
+
+    @Test
     void failingProductServiceOpensTheCircuitAndOrdersFailFast() {
         services.stubFor(WireMock.get(urlPathEqualTo("/internal/products")).willReturn(serverError()));
 

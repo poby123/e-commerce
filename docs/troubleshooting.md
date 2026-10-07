@@ -37,3 +37,27 @@
 ## 7. 첫 부하 측정이 이론과 반대로 나옴 (4단계)
 - **증상**: 비관적 락이 조건부 UPDATE보다 빨랐다(측정 1~2초).
 - **조치**: 재고 3,000/요청 20,000으로 키우고 3회 반복 중앙값을 냈다. 여전히 둘의 차이는 노이즈 수준이었다. 이론("비관적 락은 느리다")에 맞추지 않고 그대로 기록했다(ADR-0009). 이 환경에서는 행 락 하나와 커넥션 풀 10개가 공통 병목이기 때문이다.
+
+## 8. 테스트 클래스를 추가하자 Circuit이 저절로 열림 (5단계)
+- **증상**: 장애 격리 테스트가 단독으로는 통과하고 전체 실행에서는 실패했다. 4xx만 보냈는데 Circuit이 OPEN이 됐다.
+- **원인**: Spring은 설정이 같은 테스트 클래스끼리 컨텍스트를 캐시해 재사용한다. 그런데 WireMock(`@RegisterExtension`)은 클래스마다 새 포트로 다시 떴다. 캐시된 컨텍스트가 죽은 포트로 호출했고, 연결 실패가 쌓여 Circuit이 열렸다. Circuit은 정확히 동작한 것이다.
+- **해결**: WireMock을 JVM당 하나(static)만 띄우고, 테스트마다 스텁만 초기화한다.
+
+## 9. 장애 중 Gateway가 order-service보다 먼저 포기함 (5단계)
+- **증상**: product를 멈추자 주문이 5초 만에 GATEWAY-503으로 끝났다. order-service의 응답(ORDER-005)은 클라이언트에게 가지 못했다.
+- **원인**: 안쪽(order → product: 2초 × 재시도)이 바깥쪽(Gateway 5초)보다 길었다.
+- **해결**: 타임아웃 예산을 맞췄다. product 1초 × 2 + 0.1초 < Gateway 5초.
+
+## 10. 재시도가 2배로 일어남 (5단계)
+- **증상**: 타임아웃을 1초로 줄였는데 실패까지 4.1초가 걸렸다.
+- **원인**: spring-kafka가 spring-retry를 끌고 들어오고, spring-retry가 클래스패스에 있으면 Spring Cloud LoadBalancer가 GET의 I/O 오류를 스스로 재시도한다. Resilience4j 2회 × LoadBalancer 2회 = 4회 호출이었다. 장애 상황에서 다운스트림 부하를 키우는 재시도 증폭이다.
+- **해결**: `spring.cloud.loadbalancer.retry.enabled=false`. 재시도는 Resilience4j 한 곳에서만 한다.
+- **검증**: `aFailingLookupIsCalledExactlyTwiceNotMore`. 수정 전에는 "4회 호출"로 실패하고, 수정 후에는 통과한다. 처음에는 500 응답으로 테스트해서 문제를 잡지 못했다. LoadBalancer는 I/O 오류만 재시도하기 때문에, 타임아웃으로 바꿔서 잡아냈다.
+
+## 11. Gateway 메트릭이 401
+- **원인**: Gateway의 보안 필터가 `/actuator/prometheus`에도 인증을 요구했다. 경로를 공개하면 외부에 메트릭이 노출된다.
+- **해결**: actuator를 내부 전용 관리 포트(8090)로 분리하고, 그 포트로 들어온 요청만 허용한다. Prometheus는 Eureka 메타데이터의 `management.port`로 주소를 바꿔서 수집한다.
+
+## 12. 재시작 직후 Debezium 커넥터 등록 실패
+- **원인**: Kafka Connect가 헬스체크(`GET /connectors`)에는 응답하지만, 내부 리밸런싱 중에는 설정 변경을 거절했다. 그 결과 `connect-init`이 실패했고, 거기에 의존하는 서비스 9개가 "Created" 상태로 멈췄다.
+- **해결**: 등록 스크립트가 재시도하고, 커넥터 task가 RUNNING이 될 때까지 기다린다.

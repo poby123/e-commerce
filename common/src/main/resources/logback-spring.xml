@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Shared by every service (they depend on common). Console as usual (with [app,traceId,spanId]);
+     with the "loki" profile, also pushed to Loki, labelled by app and level. -->
+<configuration>
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+    <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
+    <springProperty name="appName" source="spring.application.name"/>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+
+    <springProfile name="loki">
+        <appender name="LOKI" class="com.github.loki4j.logback.Loki4jAppender">
+            <http>
+                <url>${LOKI_URL:-http://localhost:3100/loki/api/v1/push}</url>
+            </http>
+            <format>
+                <label>
+                    <pattern>app=${appName},level=%level</pattern>
+                </label>
+                <!-- traceId=... is what Grafana's derived field turns into a link to the trace in Zipkin. -->
+                <message>
+                    <pattern>%level %logger{36} traceId=%X{traceId:-} spanId=%X{spanId:-} [%thread] %msg %ex</pattern>
+                </message>
+            </format>
+        </appender>
+        <root level="INFO">
+            <appender-ref ref="LOKI"/>
+        </root>
+    </springProfile>
+</configuration>

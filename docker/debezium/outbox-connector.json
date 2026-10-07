@@ -23,5 +23,5 @@
   "transforms.outbox.table.field.event.payload": "payload",
   "transforms.outbox.route.by.field": "aggregate_type",
   "transforms.outbox.route.topic.replacement": "${routedByValue}",
-  "transforms.outbox.table.fields.additional.placement": "type:header:type"
+  "transforms.outbox.table.fields.additional.placement": "type:header:type,traceparent:header:traceparent"
 }

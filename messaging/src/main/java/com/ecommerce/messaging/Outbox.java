@@ -6,20 +6,26 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.UUID;
+import java.util.function.Supplier;
 
 /**
  * Transactional outbox. A message is written to the service's own `outbox` table in the same transaction as the
  * business change, so both commit or neither does. Debezium reads the table from the binlog and publishes each
- * row to Kafka: topic = aggregate_type, key = aggregate_id, headers id and type.
+ * row to Kafka: topic = aggregate_type, key = aggregate_id, headers id, type and traceparent.
+ *
+ * <p>traceparent is the current W3C trace context. Debezium is not traced, so without it every message would
+ * start a new trace; with it, one order is one trace across HTTP, the outbox, Kafka and every service.
  */
 public class Outbox {
 
     private final JdbcTemplate jdbc;
     private final ObjectMapper objectMapper;
+    private final Supplier<String> traceparent;
 
-    public Outbox(JdbcTemplate jdbc, ObjectMapper objectMapper) {
+    public Outbox(JdbcTemplate jdbc, ObjectMapper objectMapper, Supplier<String> traceparent) {
         this.jdbc = jdbc;
         this.objectMapper = objectMapper;
+        this.traceparent = traceparent;
     }
 
     /**
@@ -34,8 +40,10 @@ public class Outbox {
             throw new IllegalStateException("Outbox.send must run inside the transaction of the business change");
         }
         String id = UUID.randomUUID().toString();
-        jdbc.update("INSERT INTO outbox (id, aggregate_type, aggregate_id, type, payload, created_at) VALUES (?, ?, ?, ?, ?, NOW(6))",
-                id, topic, key, message.getClass().getSimpleName(), toJson(message));
+        jdbc.update("""
+                INSERT INTO outbox (id, aggregate_type, aggregate_id, type, payload, traceparent, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, NOW(6))
+                """, id, topic, key, message.getClass().getSimpleName(), toJson(message), traceparent.get());
         return id;
     }
 

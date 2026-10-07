@@ -9,6 +9,7 @@ dependencies {
     api("com.fasterxml.jackson.core:jackson-databind")
     compileOnly("org.springframework.boot:spring-boot-autoconfigure")
     compileOnly("org.springframework:spring-jdbc")
+    compileOnly("io.micrometer:micrometer-tracing")
 
     testImplementation("org.springframework:spring-jdbc")
 }

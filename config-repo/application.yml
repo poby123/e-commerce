@@ -28,11 +28,25 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus
   endpoint:
     health:
       probes:
         enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      # Buckets so Prometheus can compute p95/p99 across instances (histogram_quantile).
+      percentiles-histogram:
+        http.server.requests: true
+  tracing:
+    sampling:
+      # Every request in this environment; production would sample a fraction (and keep all errors).
+      probability: 1.0
+  zipkin:
+    tracing:
+      endpoint: ${ZIPKIN_URL:http://localhost:9411/api/v2/spans}
 
 ecommerce:
   jwt:
