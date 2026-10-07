@@ -28,3 +28,38 @@ spring:
         # Stable JSON for Page responses (content + page metadata) instead of serializing PageImpl.
         serialization-mode: via_dto
         max-page-size: 100
+
+# Fault isolation for the product lookup (client/ProductCatalog). 4xx answers are business results, not failures.
+resilience4j:
+  circuitbreaker:
+    instances:
+      product:
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 20
+        minimum-number-of-calls: 10
+        failure-rate-threshold: 50
+        slow-call-duration-threshold: 1s
+        slow-call-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        record-exceptions:
+          - org.springframework.web.client.RestClientException
+        ignore-exceptions:
+          - com.ecommerce.order.client.DownstreamException
+  retry:
+    instances:
+      product:
+        max-attempts: 2
+        wait-duration: 100ms
+        retry-exceptions:
+          - org.springframework.web.client.ResourceAccessException
+          - org.springframework.web.client.HttpServerErrorException
+        ignore-exceptions:
+          - com.ecommerce.order.client.DownstreamException
+          - io.github.resilience4j.circuitbreaker.CallNotPermittedException
+  bulkhead:
+    instances:
+      product:
+        max-concurrent-calls: 50
+        max-wait-duration: 0

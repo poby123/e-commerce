@@ -1,30 +1,88 @@
 spring:
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6380}
   cloud:
     gateway:
       server:
         webflux:
+          httpclient:
+            connect-timeout: 2000
+            response-timeout: 5s
           routes:
+            # Login gets its own route for a tighter, per-IP rate limit (password guessing).
+            - id: auth-login
+              uri: lb://user-service
+              predicates:
+                - Path=/api/auth/login
+              filters:
+                - name: RequestRateLimiter
+                  args:
+                    redis-rate-limiter.replenishRate: 1
+                    redis-rate-limiter.burstCapacity: 10
+                    key-resolver: "#{@clientIpKeyResolver}"
+                - name: CircuitBreaker
+                  args: { name: user-service, fallbackUri: "forward:/fallback/unavailable" }
             - id: user-service
               uri: lb://user-service
               predicates:
                 - Path=/api/auth/**,/api/users/**
+              filters:
+                - name: CircuitBreaker
+                  args: { name: user-service, fallbackUri: "forward:/fallback/unavailable" }
             - id: product-service
               uri: lb://product-service
               predicates:
                 - Path=/api/products/**
+              filters:
+                - name: CircuitBreaker
+                  args: { name: product-service, fallbackUri: "forward:/fallback/unavailable" }
             - id: inventory-service
               uri: lb://inventory-service
               predicates:
                 - Path=/api/inventory/**
+              filters:
+                - name: CircuitBreaker
+                  args: { name: inventory-service, fallbackUri: "forward:/fallback/unavailable" }
             - id: coupon-service
               uri: lb://coupon-service
               predicates:
                 - Path=/api/coupon-policies/**,/api/coupons/**
+              filters:
+                - name: CircuitBreaker
+                  args: { name: coupon-service, fallbackUri: "forward:/fallback/unavailable" }
             - id: order-service
               uri: lb://order-service
               predicates:
                 - Path=/api/orders/**
+              filters:
+                - name: RequestRateLimiter
+                  args:
+                    redis-rate-limiter.replenishRate: 5
+                    redis-rate-limiter.burstCapacity: 10
+                    key-resolver: "#{@userKeyResolver}"
+                - name: CircuitBreaker
+                  args: { name: order-service, fallbackUri: "forward:/fallback/unavailable" }
           # /internal/** is deliberately not routed: service-to-service APIs are unreachable from outside.
+
+# Gateway circuit breakers count connection failures and timeouts only. A service's own 5xx (e.g. order-service's
+# 503 "dependency unavailable") is a meaningful answer and is passed through, not replaced by the fallback.
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        sliding-window-size: 20
+        minimum-number-of-calls: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+  timelimiter:
+    configs:
+      default:
+        # Spring Cloud CircuitBreaker's default is 1 s; must cover the slowest normal call (login hashes a password).
+        timeout-duration: 5s
 
 gateway:
   auth:

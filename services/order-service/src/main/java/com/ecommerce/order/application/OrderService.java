@@ -3,13 +3,16 @@ package com.ecommerce.order.application;
 import com.ecommerce.common.error.BusinessException;
 import com.ecommerce.order.api.OrderDtos.Line;
 import com.ecommerce.order.api.OrderDtos.PlaceOrderRequest;
-import com.ecommerce.order.client.ProductClient;
+import com.ecommerce.order.client.DownstreamException;
+import com.ecommerce.order.client.ProductCatalog;
 import com.ecommerce.order.client.ProductClient.ProductSnapshot;
 import com.ecommerce.order.domain.Order;
 import com.ecommerce.order.domain.OrderItem;
 import com.ecommerce.order.domain.OrderRepository;
 import com.ecommerce.order.error.OrderErrorCode;
 import com.ecommerce.order.saga.OrderSagaManager;
+import io.github.resilience4j.bulkhead.BulkheadFullException;
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -35,14 +38,14 @@ public class OrderService {
     private static final String ON_SALE = "ON_SALE";
 
     private final OrderRepository orderRepository;
-    private final ProductClient productClient;
+    private final ProductCatalog productCatalog;
     private final OrderSagaManager sagaManager;
     private final TransactionTemplate transaction;
 
-    public OrderService(OrderRepository orderRepository, ProductClient productClient, OrderSagaManager sagaManager,
+    public OrderService(OrderRepository orderRepository, ProductCatalog productCatalog, OrderSagaManager sagaManager,
                         TransactionTemplate transaction) {
         this.orderRepository = orderRepository;
-        this.productClient = productClient;
+        this.productCatalog = productCatalog;
         this.sagaManager = sagaManager;
         this.transaction = transaction;
     }
@@ -77,10 +80,17 @@ public class OrderService {
     private List<OrderItem> priceItems(Map<Long, Integer> quantities) {
         Map<Long, ProductSnapshot> products;
         try {
-            products = productClient.findAll(quantities.keySet()).stream()
+            products = productCatalog.findAll(quantities.keySet()).stream()
                     .collect(Collectors.toMap(ProductSnapshot::id, Function.identity()));
+        } catch (CallNotPermittedException | BulkheadFullException e) {
+            // Circuit open or too many lookups in flight: answered without calling product-service.
+            throw new BusinessException(OrderErrorCode.DEPENDENCY_UNAVAILABLE);
         } catch (RestClientException e) {
             log.warn("Product lookup failed", e);
+            throw new BusinessException(OrderErrorCode.DEPENDENCY_UNAVAILABLE);
+        } catch (DownstreamException e) {
+            // product-service refused our request (a bug on our side, e.g. too many ids): not the client's fault.
+            log.error("Product lookup rejected: {}", e.getMessage());
             throw new BusinessException(OrderErrorCode.DEPENDENCY_UNAVAILABLE);
         }
         return quantities.entrySet().stream().map(entry -> {

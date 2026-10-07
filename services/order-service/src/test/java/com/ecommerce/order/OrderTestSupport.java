@@ -1,9 +1,8 @@
 package com.ecommerce.order;
 
 import com.github.tomakehurst.wiremock.client.WireMock;
-import com.github.tomakehurst.wiremock.junit5.WireMockExtension;
+import com.github.tomakehurst.wiremock.WireMockServer;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.extension.RegisterExtension;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -47,8 +46,16 @@ abstract class OrderTestSupport {
         }
     }
 
-    @RegisterExtension
-    static WireMockExtension services = WireMockExtension.newInstance().options(wireMockConfig().dynamicPort()).build();
+    /**
+     * One stub server for the whole JVM. Spring caches the application context across test classes with the
+     * same configuration, so the URL registered below must stay valid for all of them; a per-class
+     * WireMockExtension would restart on a new port and leave the cached context calling a dead one.
+     */
+    static final WireMockServer services = new WireMockServer(wireMockConfig().dynamicPort());
+
+    static {
+        services.start();
+    }
 
     @DynamicPropertySource
     static void serviceInstances(DynamicPropertyRegistry registry) {
@@ -60,6 +67,7 @@ abstract class OrderTestSupport {
 
     @BeforeEach
     void products() {
+        services.resetAll();
         services.stubFor(WireMock.get(urlPathEqualTo("/internal/products")).willReturn(okJson("""
                 [{"id": 1, "name": "Mug", "price": 12000, "status": "ON_SALE"},
                  {"id": 2, "name": "Coaster", "price": 3000, "status": "ON_SALE"},
