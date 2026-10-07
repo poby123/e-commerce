@@ -77,3 +77,13 @@
 ## 16. 오래된 이벤트 무시가 예외로 터짐
 - **원인**: 버전 충돌(409)이 `ElasticsearchException`이 아니라 저수준 `ResponseException`으로 올라왔다. 이 예외는 `IOException`의 하위 타입이라 catch에 걸리지 않았다.
 - **해결**: 세 가지 형태(ElasticsearchException, TransportException, ResponseException)를 모두 409로 판별한다. `anOlderOrRepeatedEventNeverOverwritesANewerOne`이 고정한다.
+
+## 17. 하이브리드를 기본값으로 바꾸자 E2E가 실패 (6b)
+- **증상**: 고유한 상품명으로 검색했는데 3건이 나왔다.
+- **원인**: 하이브리드는 의미가 비슷한 다른 상품(이전 테스트가 남긴 같은 이름 패턴)도 함께 돌려준다. 버그가 아니라 의도된 동작 변화다.
+- **조치**: "색인됐는가"는 KEYWORD로 확인하고, 하이브리드에서는 그 상품이 1위인지 확인한다. 기본 모드를 바꾸면 기존 검증의 전제도 바뀐다는 교훈.
+
+## 18. 재시작 직후 단건 확인만 실패
+- **증상**: search-service를 재시작한 직후 자동완성 확인만 실패했다. 재시도 루프가 있는 다른 확인은 통과했다.
+- **원인**: 새 IP로 뜬 인스턴스를 Gateway가 아직 몰라서 잠깐 fallback 503이 났다(troubleshooting #3).
+- **조치**: 결과적 일관성인 시스템의 확인은 모두 재시도와 함께 한다(#4와 같은 교훈).

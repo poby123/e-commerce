@@ -1,0 +1,154 @@
+{
+  "about": "Judged against scripts/seed-products.sh. 'exact' queries name the product; 'intent' queries describe a need without its words. 'absent' queries ask for things the catalog does not sell: every result is noise.",
+  "queries": [
+    {
+      "type": "exact",
+      "q": "블루투스 이어폰",
+      "relevant": [
+        "무선 블루투스 이어폰 프로"
+      ]
+    },
+    {
+      "type": "exact",
+      "q": "가습기",
+      "relevant": [
+        "초음파 가습기 대용량",
+        "가열식 가습기 미니"
+      ]
+    },
+    {
+      "type": "exact",
+      "q": "운동화",
+      "relevant": [
+        "경량 러닝화",
+        "남성 운동화 화이트",
+        "여성 스니커즈 캔버스"
+      ]
+    },
+    {
+      "type": "exact",
+      "q": "노트북",
+      "relevant": [
+        "14인치 노트북 경량",
+        "노트북 거치대 알루미늄"
+      ]
+    },
+    {
+      "type": "exact",
+      "q": "선크림",
+      "relevant": [
+        "선크림 SPF50"
+      ]
+    },
+    {
+      "type": "intent",
+      "q": "출퇴근길에 소음 없이 음악 듣고 싶어",
+      "relevant": [
+        "무선 블루투스 이어폰 프로"
+      ]
+    },
+    {
+      "type": "intent",
+      "q": "방이 건조해서 목이 아파요",
+      "relevant": [
+        "초음파 가습기 대용량",
+        "가열식 가습기 미니"
+      ]
+    },
+    {
+      "type": "intent",
+      "q": "장마철 눅눅한 방",
+      "relevant": [
+        "제습기 10L",
+        "빨래 습기 제거제 6개입"
+      ]
+    },
+    {
+      "type": "intent",
+      "q": "겨울밤 따뜻하게 자고 싶어",
+      "relevant": [
+        "극세사 이불 퀸"
+      ]
+    },
+    {
+      "type": "intent",
+      "q": "집에서 근력 운동",
+      "relevant": [
+        "덤벨 세트 10kg",
+        "요가매트 8mm"
+      ]
+    },
+    {
+      "type": "intent",
+      "q": "건조한 피부 보습",
+      "relevant": [
+        "수분 크림 50ml",
+        "핸드크림 세트",
+        "립밤 3개입"
+      ]
+    },
+    {
+      "type": "intent",
+      "q": "기름 없이 튀김 요리",
+      "relevant": [
+        "에어프라이어 5.5L"
+      ]
+    },
+    {
+      "type": "intent",
+      "q": "아침에 마실 커피",
+      "relevant": [
+        "드립백 커피 20개입"
+      ]
+    },
+    {
+      "type": "intent",
+      "q": "휴대폰 배터리가 금방 닳아요",
+      "relevant": [
+        "보조배터리 20000mAh",
+        "무선충전기 고속 15W"
+      ]
+    },
+    {
+      "type": "intent",
+      "q": "목이 편한 베개",
+      "relevant": [
+        "메모리폼 베개"
+      ]
+    },
+    {
+      "type": "intent",
+      "q": "미세먼지 심한 날 집 공기",
+      "relevant": [
+        "공기청정기 소형"
+      ]
+    },
+    {
+      "type": "intent",
+      "q": "타건감 좋은 키보드",
+      "relevant": [
+        "기계식 키보드 갈축"
+      ]
+    },
+    {
+      "type": "absent",
+      "q": "자동차 타이어",
+      "relevant": []
+    },
+    {
+      "type": "absent",
+      "q": "강아지 사료",
+      "relevant": []
+    },
+    {
+      "type": "absent",
+      "q": "골프채 드라이버",
+      "relevant": []
+    },
+    {
+      "type": "absent",
+      "q": "아이폰 충전 케이블 정품",
+      "relevant": []
+    }
+  ]
+}

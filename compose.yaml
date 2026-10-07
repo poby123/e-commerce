@@ -242,6 +242,13 @@ services:
       LOKI_URL: http://loki:3100/loki/api/v1/push
       SPRING_PROFILES_ACTIVE: loki
       ELASTICSEARCH_URL: http://elasticsearch:9200
+      ECOMMERCE_SEARCH_EMBEDDING_MODEL_DIR: /models/multilingual-e5-small
+      # ONNX Runtime allocates outside the Java heap: a smaller heap share leaves room for the model.
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=50
+    # Embedding model (ADR-0012), downloaded by ./gradlew :services:search-service:downloadEmbeddingModel
+    volumes:
+      - ./models:/models:ro
+    mem_limit: 1280m
     depends_on:
       <<: *service-deps
       elasticsearch:

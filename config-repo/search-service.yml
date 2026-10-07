@@ -1,3 +1,10 @@
 spring:
   elasticsearch:
     uris: ${ELASTICSEARCH_URL:http://localhost:9200}
+
+ecommerce:
+  search:
+    hybrid:
+      # Trade-off measured with search-eval (ADR-0012): higher drops more noise for absent products but also
+      # more intent matches. 0.82: noise 10 -> 2.2 results, intent Recall@5 0.69 -> 0.53, exact queries unaffected.
+      min-similarity: 0.82

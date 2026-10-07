@@ -3,6 +3,7 @@ package com.ecommerce.search.index;
 import co.elastic.clients.elasticsearch.indices.get_alias.IndexAliases;
 import com.ecommerce.search.client.ProductExportClient;
 import com.ecommerce.search.client.ProductExportClient.ProductExport;
+import com.ecommerce.search.embedding.Embedder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -34,11 +35,13 @@ public class Reindexer {
 
     private final ProductIndex productIndex;
     private final ProductExportClient products;
+    private final Embedder embedder;
     private final ReentrantLock running = new ReentrantLock();
 
-    public Reindexer(ProductIndex productIndex, ProductExportClient products) {
+    public Reindexer(ProductIndex productIndex, ProductExportClient products, Embedder embedder) {
         this.productIndex = productIndex;
         this.products = products;
+        this.embedder = embedder;
     }
 
     public Result reindex() throws IOException, InterruptedException {
@@ -60,8 +63,8 @@ public class Reindexer {
                     break;
                 }
                 documents += productIndex.writeAll(index, page.stream().map(p -> new ProductIndex.VersionedDocument(
-                        new ProductDocument(p.productId(), p.name(), p.description(), p.brand(), p.category(), p.price(),
-                                p.status(), p.createdAt()), p.version())).toList());
+                        ProductDocument.of(p.productId(), p.name(), p.description(), p.brand(), p.category(), p.price(),
+                                p.status(), p.createdAt(), embedder), p.version())).toList());
                 afterId = page.getLast().productId();
             }
             client.indices().refresh(r -> r.index(index));

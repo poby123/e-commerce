@@ -1,5 +1,6 @@
 package com.ecommerce.search.api;
 
+import com.ecommerce.search.api.SearchDtos.Mode;
 import com.ecommerce.search.api.SearchDtos.SearchQuery;
 import com.ecommerce.search.api.SearchDtos.SearchResult;
 import com.ecommerce.search.api.SearchDtos.Sort;
@@ -35,8 +36,9 @@ public class SearchController {
                                @RequestParam(required = false) Long maxPrice,
                                @RequestParam(defaultValue = "RELEVANCE") Sort sort,
                                @RequestParam(defaultValue = "0") @Min(0) @Max(499) int page,
-                               @RequestParam(defaultValue = "20") @Min(1) @Max(20) int size) throws IOException {
-        return productSearch.search(new SearchQuery(q, category, brand, minPrice, maxPrice, sort, page, size));
+                               @RequestParam(defaultValue = "20") @Min(1) @Max(20) int size,
+                               @RequestParam(defaultValue = "HYBRID") Mode mode) throws IOException {
+        return productSearch.search(new SearchQuery(q, category, brand, minPrice, maxPrice, sort, page, size, mode));
     }
 
     @GetMapping("/api/search/autocomplete")

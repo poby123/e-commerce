@@ -6,6 +6,8 @@ spring-cloud = "2025.0.3"
 nimbus-jose-jwt = "9.37.4"
 wiremock = "3.13.1"
 loki4j = "1.6.0"
+onnxruntime = "1.21.1"
+djl = "0.32.0"
 
 [libraries]
 spring-boot-gradle-plugin = { module = "org.springframework.boot:spring-boot-gradle-plugin", version.ref = "spring-boot" }
@@ -14,3 +16,5 @@ spring-cloud-dependencies = { module = "org.springframework.cloud:spring-cloud-d
 nimbus-jose-jwt = { module = "com.nimbusds:nimbus-jose-jwt", version.ref = "nimbus-jose-jwt" }
 wiremock-standalone = { module = "org.wiremock:wiremock-standalone", version.ref = "wiremock" }
 loki-logback-appender = { module = "com.github.loki4j:loki-logback-appender", version.ref = "loki4j" }
+onnxruntime = { module = "com.microsoft.onnxruntime:onnxruntime", version.ref = "onnxruntime" }
+djl-tokenizers = { module = "ai.djl.huggingface:tokenizers", version.ref = "djl" }

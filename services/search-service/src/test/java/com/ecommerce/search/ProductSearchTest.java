@@ -5,6 +5,7 @@ import com.ecommerce.messaging.IncomingMessage;
 import com.ecommerce.messaging.contract.ProductMessages.ProductChanged;
 import com.ecommerce.search.api.ProductSearch;
 import com.ecommerce.search.api.SearchDtos.Hit;
+import com.ecommerce.search.api.SearchDtos.Mode;
 import com.ecommerce.search.api.SearchDtos.SearchQuery;
 import com.ecommerce.search.api.SearchDtos.SearchResult;
 import com.ecommerce.search.api.SearchDtos.Sort;
@@ -45,6 +46,8 @@ import static org.assertj.core.api.Assertions.assertThat;
         "eureka.client.enabled=false",
         "spring.kafka.listener.auto-startup=false",
         "spring.kafka.admin.auto-create=false",
+        // Tests share one index; enough neighbours that other tests' products cannot crowd this test's out.
+        "ecommerce.search.hybrid.vector-candidates=60",
 })
 @Import(ProductSearchTest.Infra.class)
 class ProductSearchTest {
@@ -210,6 +213,34 @@ class ProductSearchTest {
         assertThat(client.indices().exists(e -> e.index(before)).value()).isFalse();
     }
 
+    @Test
+    void anIntentWithNoMatchingWordsIsFoundByMeaning() throws Exception {
+        long humidifier = product("초음파 가습기 4L", "LIVING", 45_000);
+        product("기계식 키보드 갈축", "DIGITAL", 99_000);
+        product("극세사 이불 퀸", "LIVING", 69_000);
+        refresh();
+
+        String intent = "방이 너무 건조해서 목이 아파요";
+        assertThat(ids(query(intent, Mode.KEYWORD))).isEmpty();
+        assertThat(ids(query(intent, Mode.HYBRID)).getFirst()).isEqualTo(humidifier);
+    }
+
+    @Test
+    void anExactQueryKeepsItsKeywordMatchOnTop() throws Exception {
+        long earbuds = product("무선 블루투스 이어폰", "DIGITAL", 89_000);
+        product("유선 이어폰 고음질", "DIGITAL", 19_000);
+        product("블루투스 스피커 방수", "DIGITAL", 49_000);
+        refresh();
+
+        assertThat(ids(query("블루투스이어폰", Mode.HYBRID)).getFirst()).isEqualTo(earbuds);
+    }
+
+    @Test
+    void reciprocalRankFusionRewardsAgreement() {
+        // "b" is 2nd in both lists, "a" 1st in one and absent from the other: agreement wins.
+        assertThat(search.reciprocalRankFusion(List.of(List.of("a", "b", "c"), List.of("d", "b", "e"))).getFirst()).isEqualTo("b");
+    }
+
     record ExportRow(long productId, String name, String description, String brand, String category, long price,
                      String status, long version, Instant createdAt) {
     }
@@ -231,6 +262,10 @@ class ProductSearchTest {
 
     private SearchResult query(String q) throws Exception {
         return search.search(new SearchQuery(q, null, List.of(tag), null, null, Sort.RELEVANCE, 0, 20));
+    }
+
+    private SearchResult query(String q, Mode mode) throws Exception {
+        return search.search(new SearchQuery(q, null, List.of(tag), null, null, Sort.RELEVANCE, 0, 20, mode));
     }
 
     private static List<Long> ids(SearchResult result) {

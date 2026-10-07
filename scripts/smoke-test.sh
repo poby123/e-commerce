@@ -137,9 +137,10 @@ echo "-- search (CQRS read model)"
 UNIQUE="스모크$RANDOM$RANDOM"
 call POST /api/products "{\"name\":\"$UNIQUE 블루투스 스피커\",\"brand\":\"스모크랩\",\"category\":\"DIGITAL\",\"price\":30000}" -H "Authorization: Bearer $ADMIN"
 SEARCH_ID=$(jq -r .id <<<"$BODY")
-found() { # query expected-count -> waits for the index to catch up (near real time + event lag)
+found() { # query expected-count -> waits for the index to catch up (near real time + event lag).
+  # KEYWORD: exact matching is the question here; the default HYBRID also returns similar products.
   for _ in $(seq 1 30); do
-    call GET "/api/search/products?q=$(jq -rn --arg q "$1" '$q|@uri')&brand=%EC%8A%A4%EB%AA%A8%ED%81%AC%EB%9E%A9" ""
+    call GET "/api/search/products?q=$(jq -rn --arg q "$1" '$q|@uri')&brand=%EC%8A%A4%EB%AA%A8%ED%81%AC%EB%9E%A9&mode=KEYWORD" ""
     [[ "$(jq -r .total <<<"$BODY")" == "$2" ]] && return 0
     sleep 0.5
   done
@@ -149,10 +150,17 @@ check "new product is searchable (no login needed)" 1 "$(jq -r .total <<<"$BODY"
 echo "       indexed after $(( ($(date +%s%N) - START) / 1000000 )) ms"
 found "${UNIQUE}블루투스스피커" 1
 check "Korean query without spaces matches" 1 "$(jq -r .total <<<"$BODY")"
+call GET "/api/search/products?q=$(jq -rn --arg q "$UNIQUE 블루투스 스피커" '$q|@uri')" ""
+check "hybrid (default) ranks the exact product first" "$SEARCH_ID" "$(jq -r '.items[0].productId' <<<"$BODY")"
+call GET "/api/search/products?q=$(jq -rn '"방이 건조해서 목이 아파요"|@uri')" ""
+check "hybrid finds a product by intent (keyword finds none)" true "$(jq '[.items[].name] | any(test("가습기"))' <<<"$BODY")"
 call PATCH "/api/products/$SEARCH_ID" '{"price":25000}' -H "Authorization: Bearer $ADMIN"
 for _ in $(seq 1 30); do found "$UNIQUE" 1; [[ "$(jq -r '.items[0].price' <<<"$BODY")" == 25000 ]] && break; sleep 0.5; done
 check "price change reaches the index" 25000 "$(jq -r '.items[0].price' <<<"$BODY")"
-call GET "/api/search/autocomplete?q=$(jq -rn --arg q "$UNIQUE" '$q|@uri')" ""
+for _ in $(seq 1 20); do
+  call GET "/api/search/autocomplete?q=$(jq -rn --arg q "$UNIQUE" '$q|@uri')" ""
+  [[ "$STATUS" == 200 && "$(jq -r '.[0]' <<<"$BODY")" != null ]] && break; sleep 0.5
+done
 check "autocomplete suggests it" "$UNIQUE 블루투스 스피커" "$(jq -r '.[0]' <<<"$BODY")"
 call PATCH "/api/products/$SEARCH_ID" '{"status":"SUSPENDED"}' -H "Authorization: Bearer $ADMIN"
 found "$UNIQUE" 0

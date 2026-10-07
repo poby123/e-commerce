@@ -182,6 +182,12 @@
       },
       "createdAt": {
         "type": "date"
+      },
+      "embedding": {
+        "type": "dense_vector",
+        "dims": 384,
+        "similarity": "dot_product",
+        "index": true
       }
     }
   }

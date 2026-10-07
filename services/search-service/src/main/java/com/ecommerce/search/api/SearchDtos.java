@@ -9,8 +9,16 @@ public final class SearchDtos {
 
     public enum Sort { RELEVANCE, PRICE_ASC, PRICE_DESC, NEWEST }
 
+    /** KEYWORD: BM25 only. SEMANTIC: vectors only. HYBRID: both, fused by reciprocal rank (ADR-0012). */
+    public enum Mode { KEYWORD, SEMANTIC, HYBRID }
+
     public record SearchQuery(String q, List<String> categories, List<String> brands, Long minPrice, Long maxPrice,
-                              Sort sort, int page, int size) {
+                              Sort sort, int page, int size, Mode mode) {
+
+        public SearchQuery(String q, List<String> categories, List<String> brands, Long minPrice, Long maxPrice,
+                           Sort sort, int page, int size) {
+            this(q, categories, brands, minPrice, maxPrice, sort, page, size, Mode.KEYWORD);
+        }
     }
 
     public record Hit(long productId, String name, String highlightedName, String brand, String category, long price) {

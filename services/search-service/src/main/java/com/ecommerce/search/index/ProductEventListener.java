@@ -3,6 +3,7 @@ package com.ecommerce.search.index;
 import com.ecommerce.messaging.IncomingMessage;
 import com.ecommerce.messaging.contract.ProductMessages.ProductChanged;
 import com.ecommerce.messaging.contract.Topics;
+import com.ecommerce.search.embedding.Embedder;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.slf4j.Logger;
@@ -25,10 +26,12 @@ public class ProductEventListener implements ApplicationRunner {
 
     private final ProductIndex productIndex;
     private final ObjectMapper objectMapper;
+    private final Embedder embedder;
 
-    public ProductEventListener(ProductIndex productIndex, ObjectMapper objectMapper) {
+    public ProductEventListener(ProductIndex productIndex, ObjectMapper objectMapper, Embedder embedder) {
         this.productIndex = productIndex;
         this.objectMapper = objectMapper;
+        this.embedder = embedder;
     }
 
     @Override
@@ -46,7 +49,7 @@ public class ProductEventListener implements ApplicationRunner {
             throw new IllegalArgumentException("Unknown product event " + message.type());
         }
         ProductChanged event = message.payload(objectMapper, ProductChanged.class);
-        if (!productIndex.write(ProductDocument.from(event), event.version())) {
+        if (!productIndex.write(ProductDocument.from(event, embedder), event.version())) {
             log.debug("Skipped product {} v{}: index already has it or newer", event.productId(), event.version());
         }
     }
