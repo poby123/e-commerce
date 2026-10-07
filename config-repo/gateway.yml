@@ -1,0 +1,15 @@
+spring:
+  cloud:
+    gateway:
+      server:
+        webflux:
+          routes:
+            - id: user-service
+              uri: lb://user-service
+              predicates:
+                - Path=/api/auth/**,/api/users/**
+
+gateway:
+  auth:
+    jwk-set-uri: http://user-service/.well-known/jwks.json
+    issuer: ${ecommerce.jwt.issuer}

@@ -1,0 +1,17 @@
+# Settings that are part of how the service works live here.
+# Settings that change per environment (hosts, passwords, TTLs) live in config-repo/user-service.yml.
+server:
+  port: 8081
+  shutdown: graceful   # finish in-flight requests on SIGTERM (rolling updates, k8s pod deletion)
+
+spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+  application:
+    name: user-service
+  config:
+    import: "optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888}"
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate

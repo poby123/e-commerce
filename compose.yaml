@@ -1,0 +1,84 @@
+# docker compose up -d                 -> MySQL + Redis only (run the services from the IDE or ./gradlew bootRun)
+# docker compose --profile app up -d   -> everything, after ./gradlew bootJar
+name: ecommerce
+
+x-service: &service
+  profiles: [ app ]
+  restart: on-failure
+  environment:
+    CONFIG_SERVER_URL: http://config-server:8888
+    EUREKA_URL: http://discovery-server:8761/eureka/
+    MYSQL_HOST: mysql
+    MYSQL_PORT: 3306
+    REDIS_HOST: redis
+    REDIS_PORT: 6379
+  depends_on: &service-deps
+    config-server:
+      condition: service_healthy
+    discovery-server:
+      condition: service_healthy
+
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+    # 3307 on the host so it does not clash with a locally installed MySQL on 3306.
+    ports: [ "3307:3306" ]
+    volumes:
+      - ./docker/mysql/init:/docker-entrypoint-initdb.d:ro
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot" ]
+      interval: 5s
+      retries: 20
+
+  redis:
+    image: redis:7.4-alpine
+    # 6380 on the host so it does not clash with a locally installed Redis on 6379.
+    ports: [ "6380:6379" ]
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      retries: 20
+
+  discovery-server:
+    profiles: [ app ]
+    build: { context: ., dockerfile: docker/Dockerfile, args: { MODULE: infra/discovery-server } }
+    ports: [ "8761:8761" ]
+    healthcheck: &health
+      test: [ "CMD-SHELL", "curl -fs http://localhost:$${SERVER_PORT}/actuator/health || exit 1" ]
+      interval: 5s
+      retries: 30
+    environment:
+      SERVER_PORT: 8761
+
+  config-server:
+    profiles: [ app ]
+    build: { context: ., dockerfile: docker/Dockerfile, args: { MODULE: infra/config-server } }
+    ports: [ "8888:8888" ]
+    volumes:
+      - ./config-repo:/config-repo:ro
+    environment:
+      SERVER_PORT: 8888
+      CONFIG_REPO: file:/config-repo/
+    healthcheck: *health
+
+  gateway:
+    <<: *service
+    build: { context: ., dockerfile: docker/Dockerfile, args: { MODULE: infra/gateway } }
+    # The only port open to the outside: every API call goes through the gateway.
+    ports: [ "8000:8000" ]
+
+  user-service:
+    <<: *service
+    build: { context: ., dockerfile: docker/Dockerfile, args: { MODULE: services/user-service } }
+    depends_on:
+      <<: *service-deps
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  mysql-data:

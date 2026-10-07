@@ -1,0 +1,25 @@
+server:
+  port: 8888
+  shutdown: graceful   # finish in-flight requests on SIGTERM (rolling updates, k8s pod deletion)
+
+spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+  application:
+    name: config-server
+  profiles:
+    # "native" serves files from a directory. Switching to a Git backend is a config change only:
+    # spring.cloud.config.server.git.uri=<repo>
+    active: native
+  cloud:
+    config:
+      server:
+        native:
+          # bootRun runs from the repo root; docker mounts the same folder at /config-repo.
+          search-locations: ${CONFIG_REPO:file:./config-repo/}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

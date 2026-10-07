@@ -1,0 +1,12 @@
+server:
+  port: 8000
+  shutdown: graceful   # finish in-flight requests on SIGTERM (rolling updates, k8s pod deletion)
+
+spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+  application:
+    name: gateway
+  config:
+    # Routes and environment-specific values come from config-server (config-repo/gateway.yml).
+    import: "optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888}"
