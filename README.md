@@ -5,6 +5,8 @@
 
 ## 아키텍처
 
+> 전체 설계도(서비스 경계, 흐름별 트랜잭션, 토픽·파티션·컨슈머 그룹, 정합성 장치): [docs/architecture.md](docs/architecture.md)
+
 ```
                        ┌────────────────────────┐
   Client ── :8000 ───▶ │ gateway                │  JWT 검증(RS256/JWKS), X-User-Id 주입, 위조 헤더 제거
